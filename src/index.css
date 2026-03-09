@@ -1,0 +1,116 @@
+/* Fuentes KROCAM — deben ir primero */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Patrick+Hand&display=swap');
+
+@import 'tailwindcss';
+
+/* Ionic Core - necesario para componentes Ionic */
+@import '@ionic/react/css/core.css';
+@import '@ionic/react/css/normalize.css';
+@import '@ionic/react/css/structure.css';
+@import '@ionic/react/css/typography.css';
+@import '@ionic/react/css/padding.css';
+@import '@ionic/react/css/float-elements.css';
+@import '@ionic/react/css/text-alignment.css';
+@import '@ionic/react/css/text-transformation.css';
+@import '@ionic/react/css/flex-utils.css';
+@import '@ionic/react/css/display.css';
+
+:root {
+  /* Paleta KROCAM BROASTER SAMIR */
+  --krocam-yellow: #FFC300;
+  --krocam-yellow-bright: #FFD700;
+  --krocam-black: #000000;
+  --krocam-red: #DC2626;
+  --krocam-red-price: #B91C1C;
+  --krocam-white: #FFFFFF;
+  --krocam-gold: #D4AF37;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Ocultar scrollbar en barra de secciones (UX) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Carta KROCAM — formas y tipografía */
+.krocam-diagonal {
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+.krocam-font-title {
+  font-family: 'Oswald', sans-serif;
+}
+.krocam-font-script {
+  font-family: 'Patrick Hand', cursive;
+}
+.krocam-price-shadow {
+  text-shadow: 0 0 1px #fff, 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+/* Header carta: fondo negro marca */
+.krocam-toolbar {
+  --background: var(--krocam-black);
+  --color: var(--krocam-white);
+}
+
+/* Área de contenido: fondo suave para que las cards destaquen */
+.carta-content {
+  --background: #f5f5f5;
+}
+
+/* Badge del carrito flotante */
+.cart-fab-wrapper {
+  position: relative;
+}
+.cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 10;
+  background-color: var(--krocam-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 2px 6px;
+}
+
+/* Botones principales KROCAM */
+.krocam-btn-primary {
+  --background: var(--krocam-yellow);
+  --background-hover: var(--krocam-yellow-bright);
+  --color: #000000;
+  --border-radius: 9999px;
+}
+
+.krocam-btn-danger {
+  --background: var(--krocam-red);
+  --background-hover: var(--krocam-red-price);
+  --color: #ffffff;
+  --border-radius: 9999px;
+}
+
+/* Chips de categorías (asegura padding y borde redondeado) */
+.krocam-category-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.5rem;
+  border-radius: 9999px;
+  line-height: 1.1;
+}
