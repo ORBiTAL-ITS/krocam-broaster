@@ -1,0 +1,63 @@
+# Dependencias
+node_modules/
+
+# Build
+dist/
+build/
+.vite/
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Logs y caché
+*.log
+npm-debug.log*
+.npm
+.cache
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Android (Capacitor)
+*.iml
+.gradle/
+local.properties
+**/android/app/google-services.json
+android/.idea/
+android/captures/
+android/build/
+android/app/build/
+
+# iOS (Capacitor)
+.pbxuser
+.mode1v3
+.mode2v3
+.perspectivev3
+.hmap
+.xcconfig
+xcuserdata/
+ios/App/Pods/
+ios/App/build/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Capacitor
+.capacitor/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.tgz
+.turbo
