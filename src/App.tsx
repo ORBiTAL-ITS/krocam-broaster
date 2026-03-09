@@ -4,18 +4,8 @@ import Home from './features/menu/MenuPage'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './features/auth/LoginPage'
-import ProfileSetupPage from './features/auth/ProfileSetupPage'
 import AdminPage from './features/admin/AdminPage'
 import MyOrdersPage from './features/menu/MyOrdersPage'
-
-/** Considera que el perfil tiene datos de entrega si existen teléfono, barrio y dirección (tras trim). */
-function hasDeliveryData(profile: { phone?: string; barrio?: string; address?: string } | null): boolean {
-  if (!profile) return false
-  const phone = (profile.phone ?? '').trim()
-  const barrio = (profile.barrio ?? '').trim()
-  const address = (profile.address ?? '').trim()
-  return phone.length > 0 && barrio.length > 0 && address.length > 0
-}
 
 function AppContent() {
   const { user, loading, profile, profileLoading } = useAuth()
@@ -23,15 +13,21 @@ function AppContent() {
   const [showMyOrders, setShowMyOrders] = useState(false)
 
   if (loading || profileLoading) {
-    return null
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-(--krocam-black)">
+        <div className="flex flex-col items-center gap-4">
+          <div className="krocam-font-title text-xl font-bold text-(--krocam-yellow)">
+            KROCAM
+          </div>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-(--krocam-yellow) border-t-transparent" />
+          <p className="text-sm text-gray-400">Cargando...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!user) {
     return <LoginPage />
-  }
-
-  if (!hasDeliveryData(profile)) {
-    return <ProfileSetupPage />
   }
 
   if (showAdminPanel && profile?.role === 'admin') {

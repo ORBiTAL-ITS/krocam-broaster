@@ -245,7 +245,7 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
     removeAllOfItem,
     clear,
   } = useCart()
-  const { user, logout } = useAuth()
+  const { user, logout, saveProfile } = useAuth()
 
   const handleAddToCart = (combo: ComboItem) => {
     const section = title
@@ -287,6 +287,18 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
   const handleFinishOrder = async (deliveryData: CheckoutDeliveryData) => {
     if (!user) return
 
+    // Guardar datos de entrega en el perfil para próximos pedidos
+    try {
+      await saveProfile({
+        phone: deliveryData.phone,
+        barrio: deliveryData.barrio,
+        address: deliveryData.address,
+        notes: deliveryData.notes,
+      })
+    } catch {
+      // Si falla guardar perfil, igual se continúa con el pedido
+    }
+
     const orderData = {
       userId: user.uid,
       items: items.map((i) => ({
@@ -326,7 +338,11 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
         `Tel: ${deliveryData.phone}\n` +
         (deliveryData.notes ? `Referencias: ${deliveryData.notes}\n` : '') +
         `\n(Pedido #${orderIdShort})`
-      openWhatsAppWithMessage(whatsappMessage)
+      const opened = openWhatsAppWithMessage(whatsappMessage)
+      if (!opened) {
+        setToastMessage('Configura VITE_WHATSAPP_NUMBER en .env para abrir WhatsApp.')
+        setIsToastOpen(true)
+      }
       // import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
     } catch (err: unknown) {
       const code = err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : ''
@@ -347,7 +363,7 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
     setIsCartOpen(false)
     clear()
     setToastMessage(
-      'Tu pedido fue registrado. Revisa "Mis pedidos" para ver el estado.',
+      'Tu pedido fue registrado. Ahora te vamos a llevar a WhatsApp para que envíes el mensaje de confirmación y podamos empezar a preparar tu pedido. Solo revisa y dale ENVIAR.',
     )
     setIsToastOpen(true)
     setTimeout(() => onOpenMyOrders?.(), 1200)

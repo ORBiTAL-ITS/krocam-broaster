@@ -61,7 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
   const mountedRef = useRef(true)
 
   // En app nativa el plugin requiere initialize() con el clientId para que GoogleSignInClient no sea null.
@@ -84,6 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(firebaseUser)
       if (!firebaseUser) {
         setProfile(null)
+        setProfileLoading(false)
         setLoading(false)
         return
       }
@@ -114,14 +115,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     let unsubscribe: (() => void) | undefined
-    redirectResultPromise
+    const timeoutMs = 3000
+    const withTimeout = Promise.race([
+      redirectResultPromise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ])
+    withTimeout
       .then((result) => {
-        if (result?.user) {
-          return applyUser(result.user)
-        }
+        if (result?.user) return applyUser(result.user)
       })
       .catch((err: unknown) => {
-        // En WebView/redirect el estado se pierde; no romper el flujo.
         const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : ''
         if (!msg.includes('missing initial state') && !msg.includes('sessionStorage')) {
           console.warn('Redirect result error:', err)

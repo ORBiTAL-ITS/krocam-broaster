@@ -8,19 +8,56 @@ import {
   IonPage,
   IonText,
 } from '@ionic/react'
-import { type CSSProperties, useState } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import logo from '../../assets/Logo.png'
 
-export default function ProfileSetupPage() {
+interface ProfileSetupPageProps {
+  onContinue?: () => void
+}
+
+export default function ProfileSetupPage({ onContinue }: ProfileSetupPageProps = {}) {
   const { user, profile, profileLoading, saveProfile, logout } = useAuth()
 
-  const [phone, setPhone] = useState(profile?.phone ?? '')
-  const [barrio, setBarrio] = useState(profile?.barrio ?? '')
-  const [address, setAddress] = useState(profile?.address ?? '')
-  const [notes, setNotes] = useState(profile?.notes ?? '')
+  const [phone, setPhone] = useState('')
+  const [barrio, setBarrio] = useState('')
+  const [address, setAddress] = useState('')
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const storageKey = user?.uid ? `krocam_profile_form_${user.uid}` : null
+
+  // 1) Cargar desde localStorage (últimos datos conocidos), para que funcione aunque Firebase falle o esté lento.
+  useEffect(() => {
+    if (!storageKey) return
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return
+      const data = JSON.parse(raw) as { phone?: string; barrio?: string; address?: string; notes?: string }
+      setPhone(data.phone ?? '')
+      setBarrio(data.barrio ?? '')
+      setAddress(data.address ?? '')
+      setNotes(data.notes ?? '')
+    } catch {
+      // Ignorar errores de parseo / localStorage
+    }
+  }, [storageKey])
+
+  // 2) Sincronizar con el perfil de Firebase cuando deje de cargar.
+  // Solo sobreescribe campos vacíos para no borrar lo que ya viene de localStorage o del usuario.
+  useEffect(() => {
+    if (profileLoading || !profile) return
+    setPhone((prev) => (prev || profile.phone || ''))
+    setBarrio((prev) => (prev || profile.barrio || ''))
+    setAddress((prev) => (prev || profile.address || ''))
+    setNotes((prev) => (prev || profile.notes || ''))
+  }, [profileLoading, profile])
+
+  // Para la UX nos interesa si el formulario ya tiene datos (vengan de Firebase o de localStorage).
+  const hasExistingProfileData =
+    Boolean(phone.trim()) &&
+    Boolean(barrio.trim()) &&
+    Boolean(address.trim())
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -33,6 +70,18 @@ export default function ProfileSetupPage() {
     setSaving(true)
     try {
       await saveProfile({ phone, barrio, address, notes })
+      // Guardar también en localStorage para que persista incluso si Firebase falla al leer después.
+      if (storageKey) {
+        try {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({ phone, barrio, address, notes }),
+          )
+        } catch {
+          // localStorage no disponible
+        }
+      }
+      onContinue?.()
     } catch (err: unknown) {
       const message =
         err && typeof err === 'object' && 'code' in err
@@ -57,7 +106,10 @@ export default function ProfileSetupPage() {
         className="bg-(--krocam-black)"
         style={{ '--background': 'var(--krocam-black)' } as CSSProperties}
       >
-        <IonLoading isOpen={isBusy} message="Guardando tus datos..." />
+        <IonLoading
+          isOpen={isBusy}
+          message={profileLoading ? 'Cargando tus datos...' : 'Guardando tus datos...'}
+        />
 
         <div className="relative z-10 min-h-full flex items-center justify-center px-4 py-10">
           <div className="w-full max-w-xl">
@@ -78,6 +130,13 @@ export default function ProfileSetupPage() {
                   Guardaremos tu teléfono y dirección para que podamos llamarte y llevarte el pedido sin pedir
                   estos datos cada vez.
                 </p>
+                {hasExistingProfileData && (
+                  <p className="mt-2 text-xs text-gray-300 max-w-md leading-snug">
+                    Ya tenemos tus datos guardados. Revísalos rápidamente y si todo está bien, solo toca
+                    <span className="font-semibold"> "Continuar a la carta" </span>
+                    para empezar a pedir.
+                  </p>
+                )}
                 {user?.email && (
                   <p className="mt-2 text-xs text-gray-400">
                     Sesión iniciada como <span className="font-medium text-(--krocam-gold)">{user.email}</span>
@@ -137,11 +196,12 @@ export default function ProfileSetupPage() {
 
                   <IonButton
                     expand="block"
-                    type="submit"
+                    type={hasExistingProfileData ? 'button' : 'submit'}
                     disabled={isBusy}
                     className="krocam-btn-primary font-semibold rounded-2xl h-12 mt-2"
+                    onClick={hasExistingProfileData ? () => onContinue?.() : undefined}
                   >
-                    Guardar y ver la carta
+                    {hasExistingProfileData ? 'Continuar a la carta' : 'Guardar y ver la carta'}
                   </IonButton>
                 </form>
 

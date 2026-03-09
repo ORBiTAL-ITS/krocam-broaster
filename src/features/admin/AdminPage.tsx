@@ -26,6 +26,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../../firebase'
+import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
 
 export const ORDER_STATUSES = [
   { value: 'pendiente', label: 'Pendiente' },
@@ -170,16 +171,28 @@ export default function AdminPage({ onClose }: AdminPageProps) {
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setUpdatingOrderId(orderId)
+    const order = orders.find((o) => o.id === orderId)
     try {
       await updateDoc(doc(db, 'orders', orderId), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       })
-      import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
+      // import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
       )
-      setToastMessage('Estado actualizado.')
+      if (newStatus === 'despachado' && order?.delivery?.phone?.trim()) {
+        const orderIdShort = orderId.slice(-6)
+        const msg = `¡Hola! Tu pedido #${orderIdShort} fue despachado y va en camino. ¡Gracias por tu compra!`
+        const opened = openWhatsAppWithMessage(msg, order.delivery.phone.trim())
+        if (opened) {
+          setToastMessage('Estado actualizado. Se abrió WhatsApp para avisar al cliente.')
+        } else {
+          setToastMessage('Estado actualizado.')
+        }
+      } else {
+        setToastMessage('Estado actualizado.')
+      }
       setToastOpen(true)
     } catch {
       setToastMessage('No se pudo actualizar el estado.')

@@ -9,12 +9,13 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "cap:sync": "npm run build && npx cap sync android",
-    "android": "npm run cap:sync && npx cap open android",
+    "android": "npm run cap:sync && (CAPACITOR_ANDROID_STUDIO_PATH=\"/Applications/Android Studio.app\" npx cap open android || open -a \"Android Studio\" android)",
     "android:run": "npm run cap:sync && npx cap run android"
   },
   "dependencies": {
     "@capacitor-firebase/messaging": "^8.1.0",
     "@capacitor/android": "^8.2.0",
+    "@capacitor/browser": "^8.0.2",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/geolocation": "^8.1.0",
