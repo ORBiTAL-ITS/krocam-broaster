@@ -18,6 +18,7 @@ import {
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { Capacitor } from '@capacitor/core'
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
+import { SocialLogin } from '@capgo/capacitor-social-login'
 import { auth, db, googleProvider, redirectResultPromise } from '../firebase'
 import { registerPushNotifications } from '../services/pushNotifications'
 
@@ -55,7 +56,12 @@ export interface UserProfileInput {
   notes?: string
 }
 
-const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as string | undefined
+const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as
+  | string
+  | undefined
+const GOOGLE_IOS_CLIENT_ID = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID as
+  | string
+  | undefined
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
@@ -64,16 +70,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profileLoading, setProfileLoading] = useState(true)
   const mountedRef = useRef(true)
 
-  // En app nativa el plugin requiere initialize() con el clientId para que GoogleSignInClient no sea null.
+  // Inicialización GoogleAuth (Android) y SocialLogin (iOS).
   useEffect(() => {
-    if (!Capacitor.isNativePlatform() || !GOOGLE_WEB_CLIENT_ID?.trim()) return
-    try {
-      GoogleAuth.initialize({
-        clientId: GOOGLE_WEB_CLIENT_ID.trim(),
-        scopes: ['profile', 'email'],
+    if (!Capacitor.isNativePlatform()) return
+    const platform = Capacitor.getPlatform()
+    const webClientId = GOOGLE_WEB_CLIENT_ID?.trim()
+
+    // Android: plugin original GoogleAuth (lo dejamos intacto para no romper nada).
+    if (platform === 'android' && webClientId) {
+      try {
+        GoogleAuth.initialize({
+          clientId: webClientId,
+          scopes: ['profile', 'email'],
+        })
+      } catch {
+        // La app debe seguir arrancando aunque falle el plugin.
+      }
+    }
+
+    // iOS: nuevo plugin SocialLogin con Google.
+    if (platform === 'ios') {
+      const iosClientId = GOOGLE_IOS_CLIENT_ID?.trim()
+      if (!iosClientId) {
+        // Si falta el Client ID de iOS, no rompemos la app: solo fallará el login cuando se pulse el botón.
+        return
+      }
+      SocialLogin.initialize({
+        google: {
+          iOSClientId: iosClientId,
+          // Opcional: si quieres usar offline/server auth, puedes añadir iOSServerClientId/webClientId.
+          mode: 'online',
+        },
+      }).catch(() => {
+        // Ignorar errores de inicialización; se manejarán al intentar loguear.
       })
-    } catch {
-      // Si el plugin no está listo o falla, la app debe seguir arrancando.
     }
   }, [])
 
@@ -118,14 +148,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const timeoutMs = 3000
     const withTimeout = Promise.race([
       redirectResultPromise,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
     ])
     withTimeout
-      .then((result) => {
+      .then(result => {
         if (result?.user) return applyUser(result.user)
       })
       .catch((err: unknown) => {
-        const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : ''
+        const msg =
+          err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: string }).message)
+            : ''
         if (!msg.includes('missing initial state') && !msg.includes('sessionStorage')) {
           console.warn('Redirect result error:', err)
         }
@@ -141,16 +174,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
+  // Salvavidas: si por algún motivo Firebase/Auth nunca responde (por ejemplo,
+  // entorno nativo con WebView limitada), no queremos dejar la app en "cargando"
+  // para siempre. Pasados unos segundos mostramos la pantalla de login igual.
+  useEffect(() => {
+    if (!loading && !profileLoading) return
+    const timeoutMs = 8000
+    const timeoutId = setTimeout(() => {
+      setLoading(false)
+      setProfileLoading(false)
+    }, timeoutMs)
+    return () => clearTimeout(timeoutId)
+  }, [loading, profileLoading])
+
   useEffect(() => {
     if (!user?.uid) return
     registerPushNotifications(user.uid).catch(() => {})
   }, [user?.uid])
 
   const loginWithGoogle = async () => {
-    const isNative = Capacitor.isNativePlatform()
+    const platform = Capacitor.getPlatform()
+    const isNativeAndroid = platform === 'android'
+    const isNativeIOS = platform === 'ios' && Capacitor.isNativePlatform()
 
-    // En la app (APK): uso del plugin nativo para evitar redirect y "missing initial state".
-    if (isNative) {
+    // En Android nativo: uso del plugin para evitar redirect y "missing initial state".
+    // En iOS usamos el flujo web (popup/redirect) porque este plugin no está soportado totalmente.
+    if (isNativeAndroid) {
       try {
         const result = await GoogleAuth.signIn()
         const idToken = result.authentication?.idToken
@@ -158,32 +207,77 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!idToken) {
           throw new Error('No se obtuvo el token de Google. Intenta de nuevo.')
         }
-        const credential = GoogleAuthProvider.credential(idToken, accessToken ?? undefined)
+        const credential = GoogleAuthProvider.credential(
+          idToken,
+          accessToken ?? undefined
+        )
         await signInWithCredential(auth, credential)
       } catch (err: unknown) {
         const raw = err && typeof err === 'object' ? (err as Record<string, unknown>) : {}
-        const inner = raw?.error && typeof raw.error === 'object' ? (raw.error as Record<string, unknown>) : raw
+        const inner =
+          raw?.error && typeof raw.error === 'object'
+            ? (raw.error as Record<string, unknown>)
+            : raw
         const msg = String(inner?.message ?? raw?.message ?? '')
         const code = String(inner?.code ?? raw?.code ?? '')
         if (msg.includes('cancel') || msg.includes('Cancel') || code === '12501') {
           return
         }
-        if (msg.toLowerCase().includes('something went wrong') || code === '12500' || code === '10') {
+        if (
+          msg.toLowerCase().includes('something went wrong') ||
+          code === '12500' ||
+          code === '10'
+        ) {
           throw new Error(
             'Error 10: Falta configurar la huella SHA-1. En Firebase Console añade el SHA-1 de tu APK (debug). En Google Cloud crea un cliente OAuth tipo Android con ese SHA-1 y package com.krocam.broaster.samir. Ver docs/GOOGLE_SIGNIN_ANDROID.md'
           )
         }
-        const friendlyMessage = msg || (err instanceof Error ? err.message : 'Error al conectar con Google.')
+        const friendlyMessage =
+          msg || (err instanceof Error ? err.message : 'Error al conectar con Google.')
         throw new Error(friendlyMessage)
       }
       return
     }
 
-    // En web: popup y, si falla, redirect.
+    // En iOS dentro de la app (WKWebView), Firebase no soporta bien signInWithPopup.
+    // Forzamos siempre redirect para que abra la pantalla de Google en el mismo WebView.
+    if (isNativeIOS) {
+      console.log('[iOS Google] empezando login con SocialLogin')
+      const res = await SocialLogin.login({
+        provider: 'google',
+        options: {},
+      })
+      console.log('[iOS Google] respuesta de SocialLogin', res)
+
+      const idToken =
+        // @ts-expect-error
+        (res?.result?.idToken as string | undefined) ??
+        // @ts-expect-error
+        (res?.result?.id_token as string | undefined)
+
+      console.log('[iOS Google] idToken', !!idToken)
+
+      if (!idToken) {
+        throw new Error(
+          'No se obtuvo el token de Google en iOS. Revisa la configuración de SocialLogin.'
+        )
+      }
+
+      const credential = GoogleAuthProvider.credential(idToken)
+      console.log('[iOS Google] antes de signInWithCredential')
+      await signInWithCredential(auth, credential)
+      console.log('[iOS Google] signInWithCredential OK')
+      return
+    }
+
+    // En web (navegador): popup y, si falla, redirect.
     try {
       await signInWithPopup(auth, googleProvider)
     } catch (err: unknown) {
-      const code = err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : ''
+      const code =
+        err && typeof err === 'object' && 'code' in err
+          ? (err as { code: string }).code
+          : ''
       const useRedirect =
         code === 'auth/popup-blocked' ||
         code === 'auth/cancelled-popup-request' ||
@@ -216,10 +310,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
-      { merge: true },
+      { merge: true }
     )
 
-    setProfile((prev) => ({
+    setProfile(prev => ({
       phone: data.phone,
       barrio: data.barrio,
       address: data.address,
@@ -250,4 +344,3 @@ export function useAuth() {
   }
   return context
 }
-

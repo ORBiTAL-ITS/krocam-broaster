@@ -1,7 +1,14 @@
 import { initializeApp } from 'firebase/app'
 import { getAnalytics } from 'firebase/analytics'
 import { getFirestore } from 'firebase/firestore'
-import { getAuth, getRedirectResult, GoogleAuthProvider } from 'firebase/auth'
+import {
+  getAuth,
+  getRedirectResult,
+  GoogleAuthProvider,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth'
 import { getMessaging, type Messaging } from 'firebase/messaging'
 
 const firebaseConfig = {
@@ -22,7 +29,15 @@ try {
   analytics = null
 }
 const db = getFirestore(app)
-const auth = getAuth(app)
+
+// En entornos híbridos (Capacitor iOS/Android) Firebase recomienda initializeAuth
+// para evitar cuelgues con el almacenamiento de sesión dentro del WebView.
+const auth =
+  typeof window !== 'undefined'
+    ? initializeAuth(app, {
+        persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      })
+    : getAuth(app)
 const googleProvider = new GoogleAuthProvider()
 
 /** Una sola vez por carga de página; evita que Strict Mode consuma el resultado del redirect. */

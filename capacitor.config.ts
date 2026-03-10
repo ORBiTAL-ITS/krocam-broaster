@@ -11,7 +11,7 @@ const googleWebClientId =
     : '';
 
 const config: CapacitorConfig = {
-  appId: 'com.krocam.broaster.samir',
+  appId: 'com.orbitalits.krocambroaster',
   appName: 'Krocam Broaster Samir',
   webDir: 'dist',
   plugins: {
@@ -21,6 +21,16 @@ const config: CapacitorConfig = {
     },
     FirebaseMessaging: {
       presentationOptions: ['alert', 'badge', 'sound'],
+    },
+    // Capgo Social Login: solo usamos Google y (opcional) Apple.
+    SocialLogin: {
+      providers: {
+        google: true,
+        facebook: false,
+        apple: true,
+        twitter: false,
+      },
+      logLevel: 1,
     },
   },
 };

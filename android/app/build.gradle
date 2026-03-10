@@ -4,7 +4,7 @@ android {
     namespace = "com.krocam.broaster.samir"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.krocam.broaster.samir"
+        applicationId "com.orbitalits.krocambroaster"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -38,6 +38,14 @@ body {
   min-height: 100vh;
 }
 
+/* Pantalla de carga: respetar notch y safe area en iOS */
+.krocam-loading-screen {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 /* Ocultar scrollbar en barra de secciones (UX) */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

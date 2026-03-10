@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Krocam Broaster Samir</string>
     <string name="title_activity_main">Krocam Broaster Samir</string>
-    <string name="package_name">com.krocam.broaster.samir</string>
+    <string name="package_name">com.orbitalits.krocambroaster</string>
     <string name="custom_url_scheme">com.krocam.broaster.samir</string>
     <!-- Web Client ID de Google (OAuth 2.0) para Sign-In nativo. Mismo valor que en Google Cloud Console > Credentials > Web client. -->
     <string name="server_client_id">35468558844-rr011aurnc0udc3im1k4l3e97jaqgt65.apps.googleusercontent.com</string>
