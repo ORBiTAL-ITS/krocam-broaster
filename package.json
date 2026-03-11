@@ -21,7 +21,6 @@
     "@capacitor/geolocation": "^8.1.0",
     "@capacitor/ios": "^8.2.0",
     "@capgo/capacitor-social-login": "^8.3.8",
-    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@ionic/react": "^8.8.0",
     "@ionic/react-router": "^8.8.0",
     "firebase": "^12.10.0",
