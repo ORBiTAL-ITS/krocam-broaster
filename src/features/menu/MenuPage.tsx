@@ -10,6 +10,7 @@ import {
   IonIcon,
   IonPage,
   IonToast,
+  IonModal,
 } from '@ionic/react'
 import { useState } from 'react'
 import { CartaMenu, type ComboItem } from '../../components/CartaMenu'
@@ -33,6 +34,7 @@ import { useAuth } from '../../context/AuthContext'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
+import { Capacitor } from '@capacitor/core'
 
 const SECCIONES: Array<{
   id: string
@@ -229,6 +231,7 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isToastOpen, setIsToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false)
 
   const {
     title,
@@ -418,6 +421,79 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
             onAddCombo={handleAddToCart}
           />
         </div>
+
+        {!Capacitor.isNativePlatform() && (
+          <>
+            <div className="mt-4 text-center text-xs text-gray-400">
+              Al continuar, aceptas nuestra{' '}
+              <button
+                type="button"
+                className="underline text-gray-300 hover:text-gray-100"
+                onClick={() => setIsPrivacyOpen(true)}
+              >
+                política de privacidad
+              </button>
+              .
+            </div>
+
+            <IonModal
+              isOpen={isPrivacyOpen}
+              onDidDismiss={() => setIsPrivacyOpen(false)}
+            >
+              <div className="h-full w-full overflow-y-auto bg-black text-gray-100 px-4 py-6">
+                <div className="max-w-2xl mx-auto space-y-4">
+                  <h1 className="text-xl font-bold text-yellow-400">
+                    Política de privacidad — KROCAM BROASTER SAMIR
+                  </h1>
+                  <p className="text-sm text-gray-300">
+                    Esta carta digital está pensada exclusivamente para que puedas
+                    ver el menú y realizar tus pedidos de forma rápida y cómoda.
+                  </p>
+                  <p className="text-sm text-gray-300">
+                    Recopilamos algunos datos básicos que tú mismo proporcionas al
+                    hacer un pedido (nombre de usuario de Google, teléfono, barrio,
+                    dirección y notas de entrega). Esta información se usa
+                    únicamente para:
+                  </p>
+                  <ul className="list-disc pl-5 text-sm text-gray-300 space-y-1">
+                    <li>Identificar tu pedido y poder contactarte.</li>
+                    <li>Entregar correctamente tu domicilio.</li>
+                    <li>Registrar el historial de pedidos en nuestro sistema.</li>
+                  </ul>
+                  <p className="text-sm text-gray-300">
+                    Los datos se almacenan en servicios de Google Firebase (Auth,
+                    Firestore y mensajería push) y, cuando confirmas tu pedido, se
+                    utiliza WhatsApp para que puedas enviar tu orden directamente
+                    al negocio. No vendemos ni compartimos tu información personal
+                    con terceros ajenos al servicio, más allá de los proveedores
+                    tecnológicos necesarios para operar la aplicación.
+                  </p>
+                  <p className="text-sm text-gray-300">
+                    Puedes solicitar la eliminación de tus datos de contacto y de
+                    tus pedidos escribiendo directamente al número de WhatsApp que
+                    aparece en la carta. Ten en cuenta que, por requisitos
+                    legales, ciertos registros pueden conservarse por un tiempo
+                    limitado.
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    Esta política aplica únicamente al uso de la carta web y puede
+                    actualizarse ocasionalmente para reflejar mejoras en el
+                    servicio.
+                  </p>
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      className="px-4 py-2 rounded-md bg-yellow-500 text-black text-sm font-semibold"
+                      onClick={() => setIsPrivacyOpen(false)}
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </IonModal>
+          </>
+        )}
 
         <CartModal
           isOpen={isCartOpen}
