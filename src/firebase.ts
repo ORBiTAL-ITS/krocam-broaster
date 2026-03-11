@@ -21,16 +21,14 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
-// DEBUG en producción (Vercel) para verificar que las env vars se inyectan bien.
-if (import.meta.env.PROD) {
-  // eslint-disable-next-line no-console
-  console.log('[firebaseConfig Vercel]', {
-    hasApiKey: !!firebaseConfig.apiKey,
-    apiKeyLength: String(firebaseConfig.apiKey ?? '').length,
-    apiKeyPrefix: String(firebaseConfig.apiKey ?? '').slice(0, 8),
-    authDomain: firebaseConfig.authDomain,
-  })
-}
+// DEBUG para verificar que las env vars se inyectan bien (también en Vercel).
+// eslint-disable-next-line no-console
+console.log('[firebaseConfig]', {
+  hasApiKey: !!firebaseConfig.apiKey,
+  apiKeyLength: String(firebaseConfig.apiKey ?? '').length,
+  apiKeyPrefix: String(firebaseConfig.apiKey ?? '').slice(0, 8),
+  authDomain: firebaseConfig.authDomain,
+})
 
 const app = initializeApp(firebaseConfig)
 let analytics: ReturnType<typeof getAnalytics> | null = null
