@@ -38,6 +38,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Advertising ID (requerido para medición/ads cuando Play Console declara un Advertising ID) -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
     <!-- Geolocation: necesario para "Usar mi ubicación actual" en el checkout -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

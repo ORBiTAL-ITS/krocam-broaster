@@ -4,7 +4,7 @@
  */
 
 import { IonButton, IonHeader, IonIcon, IonToolbar } from '@ionic/react'
-import { listOutline } from 'ionicons/icons'
+import { listOutline, logOutOutline, settingsOutline } from 'ionicons/icons'
 import logo from '../../../assets/Logo.png'
 
 interface MenuHeaderProps {
@@ -45,7 +45,7 @@ export function MenuHeader({
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             {onOpenMyOrders && (
               <IonButton
                 size="small"
@@ -66,6 +66,7 @@ export function MenuHeader({
                 className="text-xs rounded-full border-white/30"
                 onClick={onOpenAdmin}
               >
+                <IonIcon icon={settingsOutline} className="mr-1" />
                 Panel admin
               </IonButton>
             )}
@@ -77,6 +78,7 @@ export function MenuHeader({
                 className="text-xs rounded-full border-white/30"
                 onClick={onLogout}
               >
+                <IonIcon icon={logOutOutline} className="mr-1" />
                 Cerrar sesión
               </IonButton>
             )}

@@ -15,9 +15,16 @@ import {
   nutritionOutline,
   wineOutline,
 } from 'ionicons/icons'
-import { type CSSProperties, useState } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import logo from '../../assets/Logo.png'
+import { Capacitor } from '@capacitor/core'
+
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms?: string[]
+  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+  prompt: () => Promise<void>
+}
 
 const BG_ICONS = [
   { icon: restaurantOutline, size: 'text-6xl', x: 'left-[8%]', y: 'top-[12%]', opacity: 'opacity-[0.14]' },
@@ -38,6 +45,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false)
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null)
+  const [hasDismissedInstall, setHasDismissedInstall] = useState(false)
+  const [isInstallHelpOpen, setIsInstallHelpOpen] = useState(false)
 
   const handleGoogleLogin = async () => {
     setError(null)
@@ -52,6 +62,44 @@ export default function LoginPage() {
   }
 
   const isBusy = loading || submitting
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() || typeof window === 'undefined') return
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault()
+      setInstallPromptEvent(event as BeforeInstallPromptEvent)
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    }
+  }, [])
+
+  const handleInstallPwaClick = async () => {
+    if (Capacitor.isNativePlatform() || typeof window === 'undefined') {
+      return
+    }
+
+    if (!installPromptEvent) {
+      setIsInstallHelpOpen(true)
+      return
+    }
+
+    try {
+      await installPromptEvent.prompt()
+      const choice = await installPromptEvent.userChoice
+      setInstallPromptEvent(null)
+
+      if (choice.outcome === 'dismissed') {
+        setHasDismissedInstall(true)
+      }
+    } catch {
+      setIsInstallHelpOpen(true)
+    }
+  }
 
   return (
     <IonPage>
@@ -187,8 +235,105 @@ export default function LoginPage() {
                 </IonModal>
               </section>
             </div>
+            {!Capacitor.isNativePlatform() && !hasDismissedInstall && (
+              <div className="mt-4">
+                <div className="rounded-2xl bg-yellow-50/90 px-3 py-3 text-[11px] text-gray-900 shadow-sm border border-yellow-100">
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-yellow-400 text-black text-xs font-bold shrink-0">
+                      +
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-semibold text-[11px] leading-snug">
+                        Instala la carta como app en tu celular
+                      </p>
+                      <p className="text-[11px] leading-snug text-gray-700">
+                        Así entras directo desde el ícono, sin buscar el enlace cada vez.
+                      </p>
+                      <div className="pt-1.5">
+                        <button
+                          type="button"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-linear-to-r from-yellow-400 to-yellow-500 text-black text-[11px] font-semibold px-3 py-1.5 shadow-md hover:from-yellow-300 hover:to-yellow-500 active:scale-[0.99] transition-all"
+                          onClick={handleInstallPwaClick}
+                        >
+                          <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-black/10 text-[9px] font-bold">
+                            ⬆
+                          </span>
+                          <span>Instalar app en mi teléfono</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        <IonModal
+          isOpen={isInstallHelpOpen}
+          onDidDismiss={() => setIsInstallHelpOpen(false)}
+        >
+          <div className="h-full w-full overflow-y-auto bg-black text-gray-100 px-4 py-6">
+            <div className="max-w-2xl mx-auto space-y-4">
+              <h1 className="text-xl font-bold text-yellow-400">
+                Instalar la carta como app en tu celular
+              </h1>
+              <p className="text-sm text-gray-300">
+                Para que puedas abrir KROCAM como si fuera una aplicación más en tu
+                teléfono, sigue estos pasos sencillos según tu dispositivo.
+              </p>
+
+              <div className="space-y-2">
+                <h2 className="text-sm font-semibold text-yellow-300">
+                  En celulares Android (Chrome u otro navegador moderno)
+                </h2>
+                <ol className="list-decimal pl-5 text-sm text-gray-300 space-y-1">
+                  <li>Abre esta carta en el navegador de tu celular.</li>
+                  <li>
+                    Si ves un mensaje o botón de &quot;Instalar app&quot; del navegador, tócala y luego confirma en
+                    &quot;Instalar&quot;.
+                  </li>
+                  <li>
+                    Si no ves el mensaje, toca el botón de menú del navegador (tres puntos ⋮ arriba a la derecha).
+                  </li>
+                  <li>Elige la opción &quot;Agregar a pantalla principal&quot; o &quot;Instalar app&quot;.</li>
+                  <li>Confirma tocando &quot;Agregar&quot; o &quot;Instalar&quot;.</li>
+                </ol>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-sm font-semibold text-yellow-300">
+                  En iPhone o iPad (Safari)
+                </h2>
+                <ol className="list-decimal pl-5 text-sm text-gray-300 space-y-1">
+                  <li>Asegúrate de abrir la carta en Safari (el navegador de Apple).</li>
+                  <li>
+                    Toca el botón de compartir: un cuadro con una flecha hacia arriba en la parte inferior de la pantalla.
+                  </li>
+                  <li>
+                    Desliza hacia arriba o hacia abajo en el menú que aparece y busca la opción &quot;Agregar a pantalla de inicio&quot;.
+                  </li>
+                  <li>Tócala, revisa el nombre que tendrá el ícono y luego toca &quot;Agregar&quot; en la esquina superior derecha.</li>
+                </ol>
+              </div>
+
+              <p className="text-sm text-gray-300">
+                Después de esto, verás el ícono de KROCAM en la pantalla de tu celular y podrás entrar directo como si fuera
+                una app instalada.
+              </p>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-md bg-yellow-500 text-black text-sm font-semibold"
+                  onClick={() => setIsInstallHelpOpen(false)}
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </div>
+        </IonModal>
       </IonContent>
     </IonPage>
   )

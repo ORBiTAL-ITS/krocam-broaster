@@ -1,7 +1,8 @@
 /**
  * Cloud Functions: notificaciones push cuando se crea o actualiza un pedido.
- * - Nuevo pedido → notificar a admins
- * - Cambio de estado → notificar al cliente
+ * Mismo flujo que api/notify-orders.ts (WhatsApp):
+ * - Pedido confirmado (nuevo) → solo admins (template nuevo_pedido).
+ * - Cambio de estado → solo el cliente del pedido (template estado_pedido), p. ej. al despachar.
  */
 
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
@@ -22,30 +23,56 @@ const STATUS_LABELS: Record<string, string> = {
 
 async function getTokensForUser(uid: string): Promise<string[]> {
   const userSnap = await db.collection('users').doc(uid).get()
-  const tokens = userSnap.data()?.fcmTokens
-  if (!Array.isArray(tokens) || tokens.length === 0) return []
-  return tokens
+  const raw = userSnap.data()?.fcmTokens
+  if (!Array.isArray(raw) || raw.length === 0) return []
+  const out: string[] = []
+  for (const t of raw) {
+    if (typeof t === 'string' && t.trim().length > 0) out.push(t.trim())
+  }
+  return [...new Set(out)]
 }
 
+/** Todos los tokens FCM de usuarios con role === 'admin' en Firestore. */
 async function getAdminTokens(): Promise<string[]> {
   const usersSnap = await db.collection('users').where('role', '==', 'admin').get()
   const tokens: string[] = []
   for (const doc of usersSnap.docs) {
     const list = doc.data()?.fcmTokens
-    if (Array.isArray(list)) tokens.push(...list)
+    if (!Array.isArray(list)) continue
+    for (const t of list) {
+      if (typeof t === 'string' && t.trim().length > 0) tokens.push(t.trim())
+    }
   }
   return [...new Set(tokens)]
 }
 
+const FCM_MULTICAST_LIMIT = 500
+
 function sendToTokens(tokenList: string[], title: string, body: string, data?: Record<string, string>) {
   if (tokenList.length === 0) return Promise.resolve()
-  return messaging.sendEachForMulticast({
-    tokens: tokenList,
-    notification: { title, body },
-    data: data ?? {},
-    android: { priority: 'high' },
-    apns: { payload: { aps: { sound: 'default' } } },
-  })
+  const dataPayload = data ?? {}
+  const chunks: string[][] = []
+  for (let i = 0; i < tokenList.length; i += FCM_MULTICAST_LIMIT) {
+    chunks.push(tokenList.slice(i, i + FCM_MULTICAST_LIMIT))
+  }
+  return Promise.all(
+    chunks.map((tokens) =>
+      messaging.sendEachForMulticast({
+        tokens,
+        notification: { title, body },
+        data: dataPayload,
+        android: { priority: 'high' },
+        apns: { payload: { aps: { sound: 'default' } } },
+        webpush: {
+          notification: { title, body },
+          headers: {
+            Urgency: 'high',
+            TTL: '86400',
+          },
+        },
+      }),
+    ),
+  ).then(() => undefined)
 }
 
 export const onOrderCreated = onDocumentCreated('orders/{orderId}', async (event) => {
@@ -54,13 +81,12 @@ export const onOrderCreated = onDocumentCreated('orders/{orderId}', async (event
   const data = snap.data()
   const totalPrice = data?.totalPrice ?? 0
   const totalFormatted = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPrice)
-  const tokens = await getAdminTokens()
-  await sendToTokens(
-    tokens,
-    'Nuevo pedido',
-    `Total: ${totalFormatted}. Revisa el panel de administración.`,
-    { type: 'new_order', orderId: event.params.orderId },
-  )
+  const orderIdShort = event.params.orderId.slice(-6)
+  const title = 'Nuevo pedido'
+  const body = `Pedido #${orderIdShort}. Total: ${totalFormatted}.`
+  const payload = { type: 'new_order', orderId: event.params.orderId }
+  const adminTokens = await getAdminTokens()
+  await sendToTokens(adminTokens, title, body, payload)
 })
 
 export const onOrderUpdated = onDocumentUpdated('orders/{orderId}', async (event) => {
@@ -73,12 +99,14 @@ export const onOrderUpdated = onDocumentUpdated('orders/{orderId}', async (event
   if (statusBefore === statusAfter) return
   const userId = after?.userId
   if (!userId) return
-  const tokens = await getTokensForUser(userId)
   const label = STATUS_LABELS[statusAfter] ?? statusAfter
-  await sendToTokens(
-    tokens,
-    'Estado de tu pedido',
-    `Tu pedido está: ${label}.`,
-    { type: 'order_status', orderId: event.params.orderId, status: statusAfter },
-  )
+  const title = 'Estado de tu pedido'
+  const body = `${label}.`
+  const payload = {
+    type: 'order_status',
+    orderId: event.params.orderId,
+    status: statusAfter,
+  }
+  const clientTokens = await getTokensForUser(userId)
+  await sendToTokens(clientTokens, title, body, payload)
 })

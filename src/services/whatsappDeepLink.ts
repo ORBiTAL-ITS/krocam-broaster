@@ -1,16 +1,13 @@
 /**
  * Utilidades para abrir WhatsApp con mensaje prellenado.
- * Usa VITE_WHATSAPP_NUMBER (ej: 573001234567, sin +).
  * Web: window.location.href (navegación directa).
  * Android: Browser.open (Chrome Custom Tabs) para salir del WebView.
  */
 
 import { Capacitor } from '@capacitor/core'
 
-const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER
-
 function buildWhatsAppUrl(message: string, phoneNumber?: string): string | null {
-  const number = phoneNumber || WHATSAPP_NUMBER
+  const number = phoneNumber
   if (!number || typeof number !== 'string') return null
 
   const clean = number.replace(/\D/g, '')

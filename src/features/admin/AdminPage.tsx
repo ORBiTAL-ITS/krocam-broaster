@@ -17,10 +17,12 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
 } from 'firebase/firestore'
@@ -115,6 +117,8 @@ export default function AdminPage({ onClose }: AdminPageProps) {
   const [toastMessage, setToastMessage] = useState('')
   const [toastOpen, setToastOpen] = useState(false)
   const [historyDate, setHistoryDate] = useState('')
+  const [adminWhatsappNumber, setAdminWhatsappNumber] = useState('')
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -158,6 +162,21 @@ export default function AdminPage({ onClose }: AdminPageProps) {
       },
     )
     return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const loadWhatsappNumber = async () => {
+      try {
+        const ref = doc(db, 'config', 'whatsapp')
+        const snap = await getDoc(ref)
+        const data = snap.exists() ? snap.data() : null
+        const number = data && typeof data.number === 'string' ? data.number.trim() : ''
+        setAdminWhatsappNumber(number)
+      } catch {
+        setAdminWhatsappNumber('')
+      }
+    }
+    loadWhatsappNumber()
   }, [])
 
   const formatCurrency = (value: number) =>
@@ -239,6 +258,31 @@ export default function AdminPage({ onClose }: AdminPageProps) {
     const orderDayKey = formatDayKey(new Date(t))
     return orderDayKey === (historyDate || todayKey)
   })
+
+  const handleSaveWhatsappNumber = async () => {
+    const clean = adminWhatsappNumber.trim()
+    if (!clean) {
+      setToastMessage('Ingresa un número de WhatsApp válido.')
+      setToastOpen(true)
+      return
+    }
+    setSavingWhatsapp(true)
+    try {
+      const ref = doc(db, 'config', 'whatsapp')
+      await setDoc(
+        ref,
+        { number: clean },
+        { merge: true },
+      )
+      setToastMessage('Número de WhatsApp actualizado.')
+      setToastOpen(true)
+    } catch {
+      setToastMessage('No se pudo actualizar el número de WhatsApp.')
+      setToastOpen(true)
+    } finally {
+      setSavingWhatsapp(false)
+    }
+  }
 
   return (
     <IonPage>
@@ -474,6 +518,41 @@ export default function AdminPage({ onClose }: AdminPageProps) {
                       {formatCurrency(totalToday)}
                     </p>
                   </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <h2 className="krocam-font-title text-lg font-bold text-gray-900 mb-3">
+                  Configuración de WhatsApp
+                </h2>
+                <p className="text-xs text-gray-500 mb-3">
+                  Número donde llegan los pedidos desde la carta (formato internacional, sin +, ej: 573001234567).
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                  <div className="flex-1">
+                    <label
+                      htmlFor="admin-whatsapp-number"
+                      className="block text-xs font-medium text-gray-600 uppercase tracking-wider mb-1"
+                    >
+                      Número de WhatsApp
+                    </label>
+                    <input
+                      id="admin-whatsapp-number"
+                      type="tel"
+                      value={adminWhatsappNumber}
+                      onChange={(e) => setAdminWhatsappNumber(e.target.value)}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-(--krocam-yellow)"
+                      placeholder="Ej: 573001234567"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveWhatsappNumber}
+                    disabled={savingWhatsapp || !adminWhatsappNumber.trim()}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold bg-(--krocam-yellow) text-black shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {savingWhatsapp ? 'Guardando…' : 'Guardar número'}
+                  </button>
                 </div>
               </section>
 

@@ -8,9 +8,11 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
-  IonPage,
-  IonToast,
   IonModal,
+  IonPage,
+  IonTabBar,
+  IonTabButton,
+  IonToast,
 } from '@ionic/react'
 import { useState } from 'react'
 import { CartaMenu, type ComboItem } from '../../components/CartaMenu'
@@ -22,10 +24,13 @@ import chicharronImg from '../../assets/WhatsApp Image 2026-03-05 at 11.23.31 (1
 import { useCart, type CartItem } from '../../context/CartContext'
 import {
   cartOutline,
-  restaurantOutline,
-  flameOutline,
   fastFoodOutline,
+  flameOutline,
+  listOutline,
+  logOutOutline,
   pizzaOutline,
+  restaurantOutline,
+  settingsOutline,
 } from 'ionicons/icons'
 import { MenuHeader } from './components/MenuHeader'
 import { CartModal } from './components/CartModal'
@@ -34,6 +39,7 @@ import { useAuth } from '../../context/AuthContext'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
+import { getWhatsappNumber } from '../../services/appConfig'
 import { Capacitor } from '@capacitor/core'
 
 const SECCIONES: Array<{
@@ -164,20 +170,23 @@ const SECCIONES: Array<{
         id: 1,
         title: 'Combo #1',
         price: '26.000',
-        description: 'Hamburguesa + papas + gaseosa',
+        description:
+          '1 Hamburguesa + papas a la francesa + 1 gaseosa personal + salsa de la casa',
         featured: true,
       },
       {
         id: 2,
         title: 'Combo #2',
         price: '33.000',
-        description: 'Hamburguesa doble + papas + 2 gaseosas',
+        description:
+          '1 Hamburguesa + 1 presa + papas a la francesa + 2 gaseosas personales + salsa de la casa',
       },
       {
         id: 3,
         title: 'Combo #3',
         price: '48.000',
-        description: 'Hamburguesa familiar + papas + 4 gaseosas',
+        description:
+          '1 Hamburguesa + 2 presas y chicharrón de pollo + papas a la francesa + 2 gaseosas personales + salsa de la casa',
       },
     ] as ComboItem[],
   },
@@ -249,6 +258,14 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
     clear,
   } = useCart()
   const { user, logout, saveProfile } = useAuth()
+
+  const isNative = Capacitor.isNativePlatform()
+  const isSmallWeb =
+    !isNative && typeof window !== 'undefined' && window.innerWidth < 768
+  const showBottomTabs = isNative || isSmallWeb
+  const bottomTabsClassName = isNative
+    ? 'krocam-bottom-tabs md:hidden'
+    : 'krocam-bottom-tabs krocam-bottom-tabs-web md:hidden'
 
   const handleAddToCart = (combo: ComboItem) => {
     const section = title
@@ -341,9 +358,11 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
         `Tel: ${deliveryData.phone}\n` +
         (deliveryData.notes ? `Referencias: ${deliveryData.notes}\n` : '') +
         `\n(Pedido #${orderIdShort})`
-      const opened = openWhatsAppWithMessage(whatsappMessage)
+
+      const whatsappNumber = await getWhatsappNumber()
+      const opened = openWhatsAppWithMessage(whatsappMessage, whatsappNumber ?? undefined)
       if (!opened) {
-        setToastMessage('Configura VITE_WHATSAPP_NUMBER en .env para abrir WhatsApp.')
+        setToastMessage('Configura el número de WhatsApp en el panel de administración para abrir WhatsApp.')
         setIsToastOpen(true)
       }
       // import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
@@ -517,12 +536,15 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
           onFinishOrder={handleFinishOrder}
         />
 
+        {/* Espacio extra inferior para que el FAB no tape las cards */}
+        <div className="h-24" />
+
         {/* FAB carrito flotante */}
         <IonFab
           vertical="bottom"
-          horizontal="end"
+          horizontal="start"
           slot="fixed"
-          className="mr-2 mb-4"
+          className={`ml-2 mb-4 ${!Capacitor.isNativePlatform() ? 'cart-fab-web' : ''}`}
         >
           <div className="cart-fab-wrapper">
             <IonFabButton onClick={() => setIsCartOpen(true)}>
@@ -545,6 +567,24 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
           onDidDismiss={() => setIsToastOpen(false)}
         />
       </IonContent>
+      {showBottomTabs && (
+        <IonTabBar slot="bottom" className={bottomTabsClassName}>
+          <IonTabButton tab="orders" onClick={onOpenMyOrders}>
+            <IonIcon icon={listOutline} />
+            <span className="krocam-bottom-tab-label">Mis pedidos</span>
+          </IonTabButton>
+          {onOpenAdmin && (
+            <IonTabButton tab="admin" onClick={onOpenAdmin}>
+              <IonIcon icon={settingsOutline} />
+              <span className="krocam-bottom-tab-label">Panel admin</span>
+            </IonTabButton>
+          )}
+          <IonTabButton tab="logout" onClick={logout}>
+            <IonIcon icon={logOutOutline} />
+            <span className="krocam-bottom-tab-label">Cerrar sesión</span>
+          </IonTabButton>
+        </IonTabBar>
+      )}
     </IonPage>
   )
 }

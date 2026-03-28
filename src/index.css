@@ -84,6 +84,11 @@ body {
 .cart-fab-wrapper {
   position: relative;
 }
+
+/* Solo web/PWA: subir FAB para que se vea con barra inferior del navegador */
+.cart-fab-web {
+  margin-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
 .cart-badge {
   position: absolute;
   top: -4px;
@@ -121,4 +126,32 @@ body {
   padding: 0.55rem 1.5rem;
   border-radius: 9999px;
   line-height: 1.1;
+}
+
+/* Barra inferior tipo tabs (Mis pedidos / Panel admin / Cerrar sesión) */
+.krocam-bottom-tabs {
+  --background: var(--krocam-black);
+  --color-selected: #f9fafb;
+  --color: #e5e7eb;
+  --border: rgba(55, 65, 81, 0.6);
+  padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+.krocam-bottom-tabs-web {
+  padding-bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+}
+
+.krocam-bottom-tab-button {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.krocam-bottom-tab-button-danger {
+  color: #fecaca;
+}
+
+.krocam-bottom-tab-label {
+  white-space: nowrap;
 }

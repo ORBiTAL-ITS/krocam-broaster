@@ -35,7 +35,7 @@ interface CheckoutModalProps {
   onClose: () => void
   totalPrice: number
   formatCurrency: (value: number) => string
-  onFinishOrder: (deliveryData: CheckoutDeliveryData) => void
+  onFinishOrder: (deliveryData: CheckoutDeliveryData) => Promise<void> | void
 }
 
 export function CheckoutModal({
@@ -56,6 +56,7 @@ export function CheckoutModal({
   )
   const [isLocating, setIsLocating] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (isOpen && profile) {
@@ -154,17 +155,23 @@ export function CheckoutModal({
     )
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (isSubmitting) return
     if (!deliveryPhone.trim() || !deliveryBarrio.trim() || !deliveryAddress.trim()) {
       return
     }
-    onFinishOrder({
-      phone: deliveryPhone.trim(),
-      barrio: deliveryBarrio.trim(),
-      address: deliveryAddress.trim(),
-      notes: deliveryNotes.trim(),
-      coords,
-    })
+    setIsSubmitting(true)
+    try {
+      await onFinishOrder({
+        phone: deliveryPhone.trim(),
+        barrio: deliveryBarrio.trim(),
+        address: deliveryAddress.trim(),
+        notes: deliveryNotes.trim(),
+        coords,
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -282,9 +289,14 @@ export function CheckoutModal({
             <IonButton
               className="krocam-font-title krocam-btn-danger font-semibold px-6"
               onClick={handleConfirm}
-              disabled={!deliveryPhone.trim() || !deliveryBarrio.trim() || !deliveryAddress.trim()}
+              disabled={
+                isSubmitting ||
+                !deliveryPhone.trim() ||
+                !deliveryBarrio.trim() ||
+                !deliveryAddress.trim()
+              }
             >
-              Confirmar pedido
+              {isSubmitting ? 'Enviando pedido...' : 'Confirmar pedido'}
             </IonButton>
           </div>
         </div>

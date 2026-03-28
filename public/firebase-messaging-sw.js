@@ -4,8 +4,9 @@
  * Reemplaza firebaseConfig con los valores de tu proyecto (Firebase Console > Configuración del proyecto).
  * La clave VAPID se genera en Firebase Console > Cloud Messaging > Certificados de push web.
  */
-importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js')
-importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-messaging-compat.js')
+// Misma versión mayor que `firebase` en package.json (evita fallos de push en móvil / PWA).
+importScripts('https://www.gstatic.com/firebasejs/12.10.0/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/12.10.0/firebase-messaging-compat.js')
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDxV9ZUb9U_53vFx7qvfoj_JdvhF30YssA',
@@ -18,6 +19,15 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig)
 const messaging = firebase.messaging()
+
+// Misma lógica que el antiguo sw.js: activación rápida para PWA instalable y push.
+self.addEventListener('install', (event) => {
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
 
 messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title ?? payload.data?.title ?? 'KROCAM'
