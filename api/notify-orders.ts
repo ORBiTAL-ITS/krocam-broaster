@@ -1,5 +1,5 @@
 /**
- * API serverless para notificaciones por WhatsApp (alternativa gratuita a Cloud Functions).
+ * API serverless para notificaciones por WhatsApp y push FCM (sin Cloud Functions de pago).
  * Llamar desde cron-job.org cada 5–10 min con ?secret=NOTIFY_CRON_SECRET
  *
  * Env en Vercel:
@@ -7,36 +7,21 @@
  * - WHATSAPP_ACCESS_TOKEN (token de Meta)
  * - WHATSAPP_PHONE_NUMBER_ID
  * - NOTIFY_CRON_SECRET
+ *
+ * FCM: pedidos recientes → admins; cambio de estado → cliente (campos fcm_* evitan duplicados).
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { initializeApp, getApps, cert, type ServiceAccount } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-
-const ALLOWED_ORIGINS = ['http://localhost:5173', 'http://localhost:5174', 'https://krocam-broaster.vercel.app']
-
-function setCors(res: VercelResponse, req: VercelRequest) {
-  const origin = req.headers.origin
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-cron-secret')
-}
+import { FieldValue } from 'firebase-admin/firestore'
+import { setCors } from '../lib/push-api/cors'
+import { getDb } from '../lib/push-api/firebase-admin'
+import { getAdminTokens, getTokensForUser, sendToTokens } from '../lib/push-api/fcm'
 
 const STATUS_LABELS: Record<string, string> = {
   pendiente: 'Recibido',
   en_preparacion: 'En preparación',
   despachado: 'Despachado',
   entregado: 'Entregado',
-}
-
-function getFirebaseAdmin() {
-  if (getApps().length > 0) return getFirestore()
-  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-  if (!json) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON missing')
-  initializeApp({ credential: cert(JSON.parse(json) as ServiceAccount) })
-  return getFirestore()
 }
 
 async function sendWhatsAppTemplate(
@@ -81,7 +66,7 @@ async function sendWhatsAppTemplate(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  setCors(res, req)
+  setCors(res, req, { allowHeaders: 'Content-Type, x-cron-secret' })
   if (req.method === 'OPTIONS') {
     return res.status(204).end()
   }
@@ -95,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const db = getFirebaseAdmin()
+    const db = getDb()
     const now = Date.now()
     const lastMinutes = 10
     const since = new Date(now - lastMinutes * 60 * 1000)
@@ -104,6 +89,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let newOrderCount = 0
     let statusCount = 0
+    let fcmNewOrderCount = 0
+    let fcmStatusCount = 0
     const debug: string[] = []
 
     for (const docSnap of ordersSnap.docs) {
@@ -135,6 +122,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await docSnap.ref.update({ whatsapp_new_order_sent_at: FieldValue.serverTimestamp() })
       }
 
+      if (createdAt >= since.getTime() && !data?.fcm_new_order_sent_at) {
+        const adminTokens = await getAdminTokens(db)
+        const totalFormatted = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPrice)
+        const title = 'Nuevo pedido'
+        const body = `Pedido #${orderId.slice(-6)}. Total: ${totalFormatted}.`
+        await sendToTokens(adminTokens, title, body, {
+          type: 'new_order',
+          orderId,
+        })
+        fcmNewOrderCount++
+        await docSnap.ref.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })
+      }
+
       if (updatedAt >= since.getTime() && data?.whatsapp_last_status !== status && userId) {
         const userSnap = await db.collection('users').doc(userId).get()
         const phone = userSnap.data()?.phone
@@ -146,12 +146,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else debug.push(`Cliente ${userId}: sin teléfono en Firestore`)
         await docSnap.ref.update({ whatsapp_last_status: status })
       }
+
+      if (updatedAt >= since.getTime() && data?.fcm_last_status !== status && userId) {
+        const label = STATUS_LABELS[status] ?? status
+        const title = 'Estado de tu pedido'
+        const body = `${label}.`
+        const clientTokens = await getTokensForUser(db, userId)
+        await sendToTokens(clientTokens, title, body, {
+          type: 'order_status',
+          orderId,
+          status,
+        })
+        fcmStatusCount++
+        await docSnap.ref.update({ fcm_last_status: status })
+      }
     }
 
     return res.status(200).json({
       ok: true,
       new_orders_notified: newOrderCount,
       status_updates_sent: statusCount,
+      fcm_new_orders: fcmNewOrderCount,
+      fcm_status_updates: fcmStatusCount,
       debug: debug.length > 0 ? debug : undefined,
     })
   } catch (e) {

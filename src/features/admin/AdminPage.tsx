@@ -1,5 +1,5 @@
 /**
- * AdminPage: panel admin con Pedidos (lista) y Resumen (estadísticas del día + gráfica por día).
+ * AdminPage: panel admin con Pedidos, Resumen, Historial y Notificaciones push masivas.
  * Solo accesible si el usuario tiene role === 'admin' en Firestore.
  */
 
@@ -27,7 +27,8 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { db } from '../../firebase'
+import { getApiOrigin } from '../../config/apiOrigin'
+import { auth, db } from '../../firebase'
 import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
 
 export const ORDER_STATUSES = [
@@ -96,7 +97,7 @@ interface AdminPageProps {
   onClose: () => void
 }
 
-type AdminTab = 'pedidos' | 'resumen' | 'historial'
+type AdminTab = 'pedidos' | 'resumen' | 'historial' | 'notificaciones'
 
 function startOfDay(date: Date): Date {
   const d = new Date(date)
@@ -108,6 +109,11 @@ function formatDayKey(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
+function broadcastErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message
+  return 'No se pudo enviar la notificación.'
+}
+
 export default function AdminPage({ onClose }: AdminPageProps) {
   const [tab, setTab] = useState<AdminTab>('pedidos')
   const [orders, setOrders] = useState<OrderDoc[]>([])
@@ -116,9 +122,30 @@ export default function AdminPage({ onClose }: AdminPageProps) {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState('')
   const [toastOpen, setToastOpen] = useState(false)
+  const [toastColor, setToastColor] = useState<
+    'dark' | 'success' | 'danger' | 'warning'
+  >('dark')
+  const [toastDuration, setToastDuration] = useState(2200)
   const [historyDate, setHistoryDate] = useState('')
   const [adminWhatsappNumber, setAdminWhatsappNumber] = useState('')
   const [savingWhatsapp, setSavingWhatsapp] = useState(false)
+  const [broadcastTitle, setBroadcastTitle] = useState('')
+  const [broadcastBody, setBroadcastBody] = useState('')
+  const [sendingBroadcast, setSendingBroadcast] = useState(false)
+
+  const showOrdersSpinner = loading && tab !== 'notificaciones'
+  const showOrdersError = error && tab !== 'notificaciones'
+
+  const showAdminToast = (
+    message: string,
+    color: 'dark' | 'success' | 'danger' | 'warning' = 'dark',
+    duration = 2200,
+  ) => {
+    setToastColor(color)
+    setToastDuration(duration)
+    setToastMessage(message)
+    setToastOpen(true)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -205,17 +232,15 @@ export default function AdminPage({ onClose }: AdminPageProps) {
         const msg = `¡Hola! Tu pedido #${orderIdShort} fue despachado y va en camino. ¡Gracias por tu compra!`
         const opened = openWhatsAppWithMessage(msg, order.delivery.phone.trim())
         if (opened) {
-          setToastMessage('Estado actualizado. Se abrió WhatsApp para avisar al cliente.')
+          showAdminToast('Estado actualizado. Se abrió WhatsApp para avisar al cliente.')
         } else {
-          setToastMessage('Estado actualizado.')
+          showAdminToast('Estado actualizado.')
         }
       } else {
-        setToastMessage('Estado actualizado.')
+        showAdminToast('Estado actualizado.')
       }
-      setToastOpen(true)
     } catch {
-      setToastMessage('No se pudo actualizar el estado.')
-      setToastOpen(true)
+      showAdminToast('No se pudo actualizar el estado.', 'danger')
     } finally {
       setUpdatingOrderId(null)
     }
@@ -262,8 +287,7 @@ export default function AdminPage({ onClose }: AdminPageProps) {
   const handleSaveWhatsappNumber = async () => {
     const clean = adminWhatsappNumber.trim()
     if (!clean) {
-      setToastMessage('Ingresa un número de WhatsApp válido.')
-      setToastOpen(true)
+      showAdminToast('Ingresa un número de WhatsApp válido.', 'warning')
       return
     }
     setSavingWhatsapp(true)
@@ -274,13 +298,53 @@ export default function AdminPage({ onClose }: AdminPageProps) {
         { number: clean },
         { merge: true },
       )
-      setToastMessage('Número de WhatsApp actualizado.')
-      setToastOpen(true)
+      showAdminToast('Número de WhatsApp actualizado.', 'success')
     } catch {
-      setToastMessage('No se pudo actualizar el número de WhatsApp.')
-      setToastOpen(true)
+      showAdminToast('No se pudo actualizar el número de WhatsApp.', 'danger')
     } finally {
       setSavingWhatsapp(false)
+    }
+  }
+
+  const handleSendBroadcast = async () => {
+    if (sendingBroadcast) return
+    const title = broadcastTitle.trim()
+    const body = broadcastBody.trim()
+    if (!title || !body) {
+      showAdminToast('Completa título y mensaje.', 'warning')
+      return
+    }
+    const user = auth.currentUser
+    if (!user) {
+      showAdminToast('Inicia sesión para enviar notificaciones.', 'warning')
+      return
+    }
+    setSendingBroadcast(true)
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch(`${getApiOrigin()}/api/send-broadcast-fcm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ title, body }),
+      })
+      const data = (await res.json()) as { message?: string; error?: string }
+      if (!res.ok) {
+        throw new Error(data.error ?? `Error ${res.status}`)
+      }
+      showAdminToast(
+        data.message ?? 'Notificación enviada.',
+        'success',
+        5200,
+      )
+      setBroadcastTitle('')
+      setBroadcastBody('')
+    } catch (err) {
+      showAdminToast(broadcastErrorMessage(err), 'danger', 6500)
+    } finally {
+      setSendingBroadcast(false)
     }
   }
 
@@ -333,20 +397,95 @@ export default function AdminPage({ onClose }: AdminPageProps) {
             >
               Historial entregados
             </button>
+            <button
+              type="button"
+              onClick={() => setTab('notificaciones')}
+              className={`krocam-font-title krocam-category-chip shrink-0 text-sm font-semibold border transition-all ${
+                tab === 'notificaciones'
+                  ? 'bg-(--krocam-yellow) text-gray-900 border-transparent shadow-md'
+                  : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
+              }`}
+            >
+              Notificaciones
+            </button>
           </div>
         </div>
       </IonHeader>
       <IonContent className="ion-padding carta-content">
         <div className="max-w-3xl mx-auto py-4">
-          {loading && (
+          {showOrdersSpinner && (
             <div className="flex justify-center py-8">
               <IonSpinner />
             </div>
           )}
-          {error && (
+          {showOrdersError && (
             <p className="text-(--krocam-red) text-sm py-4">
               {error}
             </p>
+          )}
+
+          {tab === 'notificaciones' && (
+            <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+              <div>
+                <h2 className="krocam-font-title text-lg font-bold text-gray-900">
+                  Notificación a todos los usuarios
+                </h2>
+                <p className="text-xs text-gray-500 mt-2">
+                  Se envía por Firebase a todos los dispositivos que tengan la app (Android o iOS) o la web
+                  instalada y hayan aceptado notificaciones. Los tokens se guardan al iniciar sesión.
+                  En el simulador de iOS las push suelen no funcionar: prueba en un dispositivo físico.
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="broadcast-title"
+                  className="block text-xs font-medium text-gray-600 uppercase tracking-wider mb-1"
+                >
+                  Título
+                </label>
+                <input
+                  id="broadcast-title"
+                  type="text"
+                  value={broadcastTitle}
+                  onChange={(e) => setBroadcastTitle(e.target.value)}
+                  maxLength={120}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-(--krocam-yellow)"
+                  placeholder="Ej: Promo del día"
+                  disabled={sendingBroadcast}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="broadcast-body"
+                  className="block text-xs font-medium text-gray-600 uppercase tracking-wider mb-1"
+                >
+                  Mensaje
+                </label>
+                <textarea
+                  id="broadcast-body"
+                  value={broadcastBody}
+                  maxLength={500}
+                  onChange={(e) => setBroadcastBody(e.target.value)}
+                  disabled={sendingBroadcast}
+                  rows={5}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-(--krocam-yellow)"
+                  placeholder="Texto que verán en la notificación"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleSendBroadcast}
+                disabled={
+                  sendingBroadcast || !broadcastTitle.trim() || !broadcastBody.trim()
+                }
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-(--krocam-yellow) text-black shadow-sm disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px]"
+              >
+                {sendingBroadcast && (
+                  <IonSpinner name="crescent" className="w-5 h-5 shrink-0 text-gray-900" />
+                )}
+                <span>{sendingBroadcast ? 'Enviando…' : 'Enviar a todos'}</span>
+              </button>
+            </section>
           )}
 
           {!loading && tab === 'pedidos' && (
@@ -737,9 +876,14 @@ export default function AdminPage({ onClose }: AdminPageProps) {
         <IonToast
           isOpen={toastOpen}
           message={toastMessage}
-          duration={2000}
+          duration={toastDuration}
+          color={toastColor}
           position="top"
-          onDidDismiss={() => setToastOpen(false)}
+          onDidDismiss={() => {
+            setToastOpen(false)
+            setToastColor('dark')
+            setToastDuration(2200)
+          }}
         />
       </IonContent>
     </IonPage>

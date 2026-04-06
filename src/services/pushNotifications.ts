@@ -1,6 +1,6 @@
 /**
  * Registro de notificaciones push (FCM).
- * Web: Service Worker + Firebase JS. Android (Capacitor): plugin nativo @capacitor-firebase/messaging.
+ * Web: Service Worker + Firebase JS. Android/iOS (Capacitor): plugin nativo @capacitor-firebase/messaging.
  * Guarda el token en Firestore para que Cloud Functions envíe notificaciones.
  */
 
@@ -19,7 +19,7 @@ const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined
 
 /**
  * Registra el dispositivo para recibir notificaciones push y guarda el token en Firestore.
- * En Android (app nativa) usa el plugin FCM; en navegador usa el Service Worker.
+ * En app nativa (Android/iOS) usa el plugin FCM; en navegador usa el Service Worker.
  */
 export async function registerPushNotifications(userId: string): Promise<boolean> {
   if (typeof window === 'undefined') return false
