@@ -1,6 +1,7 @@
 /**
  * Notificación FCM inmediata al cliente cuando un admin cambia el estado del pedido.
- * POST { orderId } + Authorization: Bearer <ID token del admin>.
+ * POST { orderId, status } + Authorization: Bearer <ID token del admin>.
+ * El `status` debe coincidir con lo que el admin acaba de guardar (evita lecturas obsoletas en móvil).
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
@@ -8,6 +9,7 @@ import { getAuth } from 'firebase-admin/auth'
 import { setCors } from '../lib/push-api/cors.js'
 import { getDb } from '../lib/push-api/firebase-admin.js'
 import { getTokensForUser, sendToTokens } from '../lib/push-api/fcm.js'
+import { saveInboxNotification } from '../lib/push-api/inbox.js'
 
 const STATUS_LABELS: Record<string, string> = {
   pendiente: 'Recibido',
@@ -15,6 +17,8 @@ const STATUS_LABELS: Record<string, string> = {
   despachado: 'Despachado',
   entregado: 'Entregado',
 }
+
+const ALLOWED_STATUS = new Set(Object.keys(STATUS_LABELS))
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res, req, {
@@ -35,15 +39,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Falta Authorization: Bearer <token>.' })
   }
 
-  let parsed: { orderId?: unknown }
+  let parsed: { orderId?: unknown; status?: unknown }
   try {
     parsed = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
   } catch {
     return res.status(400).json({ error: 'JSON inválido.' })
   }
   const orderId = typeof parsed?.orderId === 'string' ? parsed.orderId.trim() : ''
+  const statusFromClient = typeof parsed?.status === 'string' ? parsed.status.trim() : ''
   if (!orderId) {
     return res.status(400).json({ error: 'orderId requerido.' })
+  }
+  if (!statusFromClient || !ALLOWED_STATUS.has(statusFromClient)) {
+    return res.status(400).json({ error: 'status inválido o faltante.' })
   }
 
   try {
@@ -61,10 +69,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Pedido no encontrado.' })
     }
     const data = orderSnap.data()
-    const status = String(data?.status ?? 'pendiente')
     const userId = data?.userId
     if (!userId || typeof userId !== 'string') {
       return res.status(400).json({ error: 'Pedido sin cliente (userId).' })
+    }
+
+    const status = statusFromClient
+    const fsStatus = String(data?.status ?? 'pendiente')
+    if (fsStatus !== status) {
+      console.warn('[notify-order-status-fcm] status Firestore distinto al del cliente', {
+        orderId,
+        firestore: fsStatus,
+        client: status,
+      })
     }
 
     if (data?.fcm_last_status === status) {
@@ -81,6 +98,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const clientTokens = await getTokensForUser(db, userId)
     await sendToTokens(clientTokens, title, body, {
       type: 'order_status',
+      orderId,
+      status,
+    })
+    await saveInboxNotification(db, userId, {
+      title,
+      body,
+      kind: 'order_status',
       orderId,
       status,
     })

@@ -14,7 +14,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { FieldValue } from 'firebase-admin/firestore'
 import { setCors } from '../lib/push-api/cors.js'
 import { getDb } from '../lib/push-api/firebase-admin.js'
-import { getAdminTokens, getTokensForUser, sendToTokens } from '../lib/push-api/fcm.js'
+import {
+  getAdminTokens,
+  getAdminUserIds,
+  getTokensForUser,
+  sendToTokens,
+} from '../lib/push-api/fcm.js'
+import { saveInboxForUserIds, saveInboxNotification } from '../lib/push-api/inbox.js'
 
 /** Envíos por API de WhatsApp (Meta). Las push de la app siguen con FCM aunque sea false. */
 const WHATSAPP_CRON_ENABLED = false
@@ -88,6 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const since = new Date(now - lastMinutes * 60 * 1000)
 
     const ordersSnap = await db.collection('orders').orderBy('createdAt', 'desc').limit(50).get()
+    const adminUserIds = await getAdminUserIds(db)
 
     let newOrderCount = 0
     let statusCount = 0
@@ -139,6 +146,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           type: 'new_order',
           orderId,
         })
+        await saveInboxForUserIds(db, adminUserIds, {
+          title,
+          body,
+          kind: 'new_order',
+          orderId,
+        })
         fcmNewOrderCount++
         await docSnap.ref.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })
       }
@@ -164,6 +177,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const clientTokens = await getTokensForUser(db, userId)
         await sendToTokens(clientTokens, title, body, {
           type: 'order_status',
+          orderId,
+          status,
+        })
+        await saveInboxNotification(db, userId, {
+          title,
+          body,
+          kind: 'order_status',
           orderId,
           status,
         })

@@ -15,15 +15,12 @@ import {
 import {
   carOutline,
   checkmarkCircleOutline,
-  logoWhatsapp,
   timeOutline,
 } from 'ionicons/icons'
 import { useEffect, useState } from 'react'
 import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
-import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
-
 const STATUS_LABELS: Record<string, string> = {
   pendiente: 'Recibido',
   en_preparacion: 'En preparación',
@@ -195,26 +192,13 @@ export default function MyOrdersPage({ onClose }: MyOrdersPageProps) {
                     }`}
                   >
                     {isDespachado && (
-                      <div className="bg-blue-500 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl" aria-hidden>🚚</span>
-                          <span className="krocam-font-title font-bold text-sm">
-                            ¡Tu pedido va en camino!
-                          </span>
-                        </div>
-                        <IonButton
-                          size="small"
-                          fill="solid"
-                          color="light"
-                          className="rounded-xl font-semibold"
-                          onClick={() => {
-                            const msg = `¡Hola! Mi pedido #${order.id.slice(-6)} está despachado. ¿Llegó ya o hay novedades?`
-                            openWhatsAppWithMessage(msg)
-                          }}
-                        >
-                          <IonIcon icon={logoWhatsapp} slot="start" />
-                          Contactar por WhatsApp
-                        </IonButton>
+                      <div className="bg-blue-500 text-white px-4 py-3 flex items-center gap-2">
+                        <span className="text-xl" aria-hidden>
+                          🚚
+                        </span>
+                        <span className="krocam-font-title font-bold text-sm">
+                          ¡Tu pedido va en camino! Te avisamos por la app con cualquier novedad.
+                        </span>
                       </div>
                     )}
                     <div className="p-4">

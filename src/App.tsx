@@ -6,12 +6,17 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import LoginPage from './features/auth/LoginPage'
 import AdminPage from './features/admin/AdminPage'
 import MyOrdersPage from './features/menu/MyOrdersPage'
+import NotificationsPage from './features/notifications/NotificationsPage'
 import logo from './assets/Logo.png'
+
+type NotifSource = 'menu' | 'admin' | null
 
 function AppContent() {
   const { user, loading, profile, profileLoading } = useAuth()
   const [showAdminPanel, setShowAdminPanel] = useState(false)
   const [showMyOrders, setShowMyOrders] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifSource, setNotifSource] = useState<NotifSource>(null)
 
   if (loading || profileLoading) {
     return (
@@ -36,9 +41,30 @@ function AppContent() {
     return <LoginPage />
   }
 
+  if (showNotifications) {
+    return (
+      <NotificationsPage
+        onClose={() => {
+          setShowNotifications(false)
+          if (notifSource === 'admin') {
+            setShowAdminPanel(true)
+          }
+          setNotifSource(null)
+        }}
+      />
+    )
+  }
+
   if (showAdminPanel && profile?.role === 'admin') {
     return (
-      <AdminPage onClose={() => setShowAdminPanel(false)} />
+      <AdminPage
+        onClose={() => setShowAdminPanel(false)}
+        onOpenNotifications={() => {
+          setNotifSource('admin')
+          setShowAdminPanel(false)
+          setShowNotifications(true)
+        }}
+      />
     )
   }
 
@@ -52,6 +78,10 @@ function AppContent() {
     <Home
       onOpenAdmin={profile?.role === 'admin' ? () => setShowAdminPanel(true) : undefined}
       onOpenMyOrders={() => setShowMyOrders(true)}
+      onOpenNotifications={() => {
+        setNotifSource('menu')
+        setShowNotifications(true)
+      }}
     />
   )
 }

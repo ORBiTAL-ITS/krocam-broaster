@@ -9,7 +9,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { setCors } from '../lib/push-api/cors.js'
 import { getDb } from '../lib/push-api/firebase-admin.js'
-import { getAdminTokens, sendToTokens } from '../lib/push-api/fcm.js'
+import { getAdminTokens, getAdminUserIds, sendToTokens } from '../lib/push-api/fcm.js'
+import { saveInboxForUserIds } from '../lib/push-api/inbox.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res, req, {
@@ -69,6 +70,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const message = `Pedido #${orderId.slice(-6)}. Total: ${totalFormatted}.`
     await sendToTokens(adminTokens, title, message, {
       type: 'new_order',
+      orderId,
+    })
+    const adminIds = await getAdminUserIds(db)
+    await saveInboxForUserIds(db, adminIds, {
+      title,
+      body: message,
+      kind: 'new_order',
       orderId,
     })
     await orderRef.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })

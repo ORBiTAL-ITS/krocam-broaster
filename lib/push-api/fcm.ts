@@ -40,6 +40,25 @@ export async function getAdminTokens(db: Firestore): Promise<string[]> {
   return [...new Set(tokens)]
 }
 
+export async function getAdminUserIds(db: Firestore): Promise<string[]> {
+  const usersSnap = await db.collection('users').where('role', '==', 'admin').get()
+  return usersSnap.docs.map((d) => d.id)
+}
+
+/** Usuarios con al menos un token FCM (para bandeja alineada con broadcast). */
+export async function getUserIdsWithFcmTokens(db: Firestore): Promise<string[]> {
+  const usersSnap = await db.collection('users').get()
+  const ids: string[] = []
+  for (const doc of usersSnap.docs) {
+    const list = doc.data()?.fcmTokens
+    if (!Array.isArray(list)) continue
+    if (list.some((t) => typeof t === 'string' && t.trim().length > 0)) {
+      ids.push(doc.id)
+    }
+  }
+  return ids
+}
+
 function sendToTokens(
   tokenList: string[],
   title: string,

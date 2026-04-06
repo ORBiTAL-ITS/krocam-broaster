@@ -41,6 +41,7 @@ import { db } from '../../firebase'
 import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
 import { getWhatsappNumber } from '../../services/appConfig'
 import { notifyAdminsNewOrder } from '../../services/notifyNewOrderPush'
+import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { Capacitor } from '@capacitor/core'
 
 /** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
@@ -236,9 +237,14 @@ const SECCIONES: Array<{
 export interface MenuPageProps {
   onOpenAdmin?: () => void
   onOpenMyOrders?: () => void
+  onOpenNotifications?: () => void
 }
 
-export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps = {}) {
+export default function MenuPage({
+  onOpenAdmin,
+  onOpenMyOrders,
+  onOpenNotifications,
+}: MenuPageProps = {}) {
   const [seccionActual, setSeccionActual] = useState(0)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
@@ -262,6 +268,7 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
     clear,
   } = useCart()
   const { user, logout, saveProfile } = useAuth()
+  const inboxUnread = useInboxUnreadCount(user?.uid)
 
   const isNative = Capacitor.isNativePlatform()
   const isSmallWeb =
@@ -443,6 +450,8 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
         onLogout={logout}
         onOpenAdmin={onOpenAdmin}
         onOpenMyOrders={onOpenMyOrders}
+        onOpenNotifications={onOpenNotifications}
+        inboxUnreadCount={inboxUnread}
       />
       <IonContent className="ion-padding carta-content">
         <div className="max-w-5xl mx-auto py-6">

@@ -7,6 +7,7 @@ import {
   IonButton,
   IonContent,
   IonHeader,
+  IonIcon,
   IonPage,
   IonSelect,
   IonSelectOption,
@@ -27,9 +28,12 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { notificationsOutline } from 'ionicons/icons'
 import { getApiOrigin } from '../../config/apiOrigin'
 import { auth, db } from '../../firebase'
+import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { notifyCustomerOrderStatus } from '../../services/notifyOrderStatusPush'
+import { useAuth } from '../../context/AuthContext'
 
 export const ORDER_STATUSES = [
   { value: 'pendiente', label: 'Pendiente' },
@@ -95,6 +99,7 @@ interface OrderDoc {
 
 interface AdminPageProps {
   onClose: () => void
+  onOpenNotifications?: () => void
 }
 
 type AdminTab = 'pedidos' | 'resumen' | 'historial' | 'notificaciones'
@@ -119,7 +124,9 @@ function broadcastErrorMessage(err: unknown): string {
   return 'No se pudo enviar la notificación.'
 }
 
-export default function AdminPage({ onClose }: AdminPageProps) {
+export default function AdminPage({ onClose, onOpenNotifications }: AdminPageProps) {
+  const { user: authUser } = useAuth()
+  const inboxUnread = useInboxUnreadCount(authUser?.uid)
   const [tab, setTab] = useState<AdminTab>('pedidos')
   const [orders, setOrders] = useState<OrderDoc[]>([])
   const [loading, setLoading] = useState(true)
@@ -231,7 +238,7 @@ export default function AdminPage({ onClose }: AdminPageProps) {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
       )
-      void notifyCustomerOrderStatus(orderId).catch((e) => {
+      void notifyCustomerOrderStatus(orderId, newStatus).catch((e) => {
         console.warn('[notifyCustomerOrderStatus]', e)
       })
       showAdminToast('Estado actualizado. El cliente recibirá una notificación en la app.')
@@ -357,13 +364,31 @@ export default function AdminPage({ onClose }: AdminPageProps) {
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
-        <IonToolbar className="krocam-toolbar flex items-center justify-between px-4">
-          <p className="krocam-font-title text-lg font-bold text-white">
+        <IonToolbar className="krocam-toolbar flex items-center justify-between px-2">
+          <p className="krocam-font-title text-lg font-bold text-white shrink min-w-0">
             Panel admin
           </p>
-          <IonButton fill="clear" color="light" onClick={onClose}>
-            Volver a la carta
-          </IonButton>
+          <div className="flex items-center gap-1 shrink-0">
+            {onOpenNotifications && (
+              <IonButton
+                fill="clear"
+                color="light"
+                className="relative"
+                onClick={onOpenNotifications}
+                aria-label="Notificaciones"
+              >
+                <IonIcon icon={notificationsOutline} />
+                {inboxUnread > 0 && (
+                  <span className="absolute top-0 right-0 min-w-[1rem] h-[1rem] px-0.5 rounded-full bg-(--krocam-red) text-white text-[10px] font-bold flex items-center justify-center">
+                    {inboxUnread > 9 ? '9+' : inboxUnread}
+                  </span>
+                )}
+              </IonButton>
+            )}
+            <IonButton fill="clear" color="light" onClick={onClose}>
+              Volver a la carta
+            </IonButton>
+          </div>
         </IonToolbar>
         <div className="px-4 pb-3 pt-1 bg-(--krocam-black)">
           <p className="text-gray-400 text-xs font-medium mb-2 uppercase tracking-wider">

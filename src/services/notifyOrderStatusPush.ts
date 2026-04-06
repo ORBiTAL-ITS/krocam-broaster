@@ -1,8 +1,11 @@
 import { auth } from '../firebase'
 import { getApiOrigin } from '../config/apiOrigin'
 
-/** FCM al cliente tras cambiar estado del pedido (admin). */
-export async function notifyCustomerOrderStatus(orderId: string): Promise<void> {
+/** FCM al cliente tras cambiar estado del pedido (admin). `status` debe ser el nuevo estado guardado en Firestore. */
+export async function notifyCustomerOrderStatus(
+  orderId: string,
+  status: string,
+): Promise<void> {
   const user = auth.currentUser
   if (!user) return
   const idToken = await user.getIdToken()
@@ -12,7 +15,7 @@ export async function notifyCustomerOrderStatus(orderId: string): Promise<void> 
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ orderId }),
+    body: JSON.stringify({ orderId, status }),
   })
   if (!res.ok) {
     const text = await res.text()

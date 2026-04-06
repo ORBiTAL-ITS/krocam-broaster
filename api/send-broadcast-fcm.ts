@@ -10,7 +10,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getAuth } from 'firebase-admin/auth'
 import { setCors } from '../lib/push-api/cors.js'
 import { getDb } from '../lib/push-api/firebase-admin.js'
-import { getAllUserFcmTokens, sendMulticastCountResults } from '../lib/push-api/fcm.js'
+import { getAllUserFcmTokens, getUserIdsWithFcmTokens, sendMulticastCountResults } from '../lib/push-api/fcm.js'
+import { saveInboxForUserIds } from '../lib/push-api/inbox.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res, req, {
@@ -85,6 +86,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       messageBody,
       payload,
     )
+
+    const recipientIds = await getUserIdsWithFcmTokens(db)
+    await saveInboxForUserIds(db, recipientIds, {
+      title,
+      body: messageBody,
+      kind: 'broadcast',
+    })
 
     return res.status(200).json({
       successCount,
