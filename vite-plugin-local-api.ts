@@ -8,6 +8,7 @@ const API_FILES: Record<string, string> = {
   '/api/send-broadcast-fcm': 'api/send-broadcast-fcm.ts',
   '/api/notify-orders': 'api/notify-orders.ts',
   '/api/notify-new-order-fcm': 'api/notify-new-order-fcm.ts',
+  '/api/notify-order-status-fcm': 'api/notify-order-status-fcm.ts',
 }
 
 const CORS_BY_PATH: Record<string, { allowHeaders: string; methods: string }> = {
@@ -20,6 +21,10 @@ const CORS_BY_PATH: Record<string, { allowHeaders: string; methods: string }> = 
     methods: 'GET, POST, OPTIONS',
   },
   '/api/notify-new-order-fcm': {
+    allowHeaders: 'Content-Type, Authorization',
+    methods: 'POST, OPTIONS',
+  },
+  '/api/notify-order-status-fcm': {
     allowHeaders: 'Content-Type, Authorization',
     methods: 'POST, OPTIONS',
   },

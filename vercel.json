@@ -9,6 +9,9 @@
     },
     "api/notify-new-order-fcm.ts": {
       "maxDuration": 30
+    },
+    "api/notify-order-status-fcm.ts": {
+      "maxDuration": 30
     }
   }
 }

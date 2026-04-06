@@ -29,7 +29,7 @@ import {
 import { useEffect, useState } from 'react'
 import { getApiOrigin } from '../../config/apiOrigin'
 import { auth, db } from '../../firebase'
-import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
+import { notifyCustomerOrderStatus } from '../../services/notifyOrderStatusPush'
 
 export const ORDER_STATUSES = [
   { value: 'pendiente', label: 'Pendiente' },
@@ -222,7 +222,6 @@ export default function AdminPage({ onClose }: AdminPageProps) {
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setUpdatingOrderId(orderId)
-    const order = orders.find((o) => o.id === orderId)
     try {
       await updateDoc(doc(db, 'orders', orderId), {
         status: newStatus,
@@ -232,18 +231,10 @@ export default function AdminPage({ onClose }: AdminPageProps) {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
       )
-      if (newStatus === 'despachado' && order?.delivery?.phone?.trim()) {
-        const orderIdShort = orderId.slice(-6)
-        const msg = `¡Hola! Tu pedido #${orderIdShort} fue despachado y va en camino. ¡Gracias por tu compra!`
-        const opened = openWhatsAppWithMessage(msg, order.delivery.phone.trim())
-        if (opened) {
-          showAdminToast('Estado actualizado. Se abrió WhatsApp para avisar al cliente.')
-        } else {
-          showAdminToast('Estado actualizado.')
-        }
-      } else {
-        showAdminToast('Estado actualizado.')
-      }
+      void notifyCustomerOrderStatus(orderId).catch((e) => {
+        console.warn('[notifyCustomerOrderStatus]', e)
+      })
+      showAdminToast('Estado actualizado. El cliente recibirá una notificación en la app.')
     } catch {
       showAdminToast('No se pudo actualizar el estado.', 'danger')
     } finally {
