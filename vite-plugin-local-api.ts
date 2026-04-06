@@ -2,10 +2,27 @@ import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin, ViteDevServer } from 'vite'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { setCors } from './lib/push-api/cors.js'
 
 const API_FILES: Record<string, string> = {
   '/api/send-broadcast-fcm': 'api/send-broadcast-fcm.ts',
   '/api/notify-orders': 'api/notify-orders.ts',
+  '/api/notify-new-order-fcm': 'api/notify-new-order-fcm.ts',
+}
+
+const CORS_BY_PATH: Record<string, { allowHeaders: string; methods: string }> = {
+  '/api/send-broadcast-fcm': {
+    allowHeaders: 'Content-Type, Authorization',
+    methods: 'POST, OPTIONS',
+  },
+  '/api/notify-orders': {
+    allowHeaders: 'Content-Type, x-cron-secret',
+    methods: 'GET, POST, OPTIONS',
+  },
+  '/api/notify-new-order-fcm': {
+    allowHeaders: 'Content-Type, Authorization',
+    methods: 'POST, OPTIONS',
+  },
 }
 
 function augmentResponse(res: ServerResponse): VercelResponse {
@@ -90,6 +107,16 @@ function registerLocalApi(vite: ViteDevServer): void {
     if (!file) {
       next()
       return
+    }
+
+    if (req.method === 'OPTIONS') {
+      const cors = CORS_BY_PATH[pathname]
+      if (cors) {
+        const vRes = augmentResponse(res)
+        setCors(vRes, req as VercelRequest, cors)
+        vRes.status(204).end()
+        return
+      }
     }
 
     try {

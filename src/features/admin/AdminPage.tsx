@@ -110,7 +110,12 @@ function formatDayKey(date: Date): string {
 }
 
 function broadcastErrorMessage(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message
+  if (err instanceof Error) {
+    if (err.name === 'TypeError' && /fetch|Load failed|NetworkError/i.test(err.message)) {
+      return 'No hubo respuesta del servidor (¿reiniciaste npm run dev tras cambiar .env.local?). Detalle: ' + err.message
+    }
+    if (err.message) return err.message
+  }
   return 'No se pudo enviar la notificación.'
 }
 
@@ -330,9 +335,19 @@ export default function AdminPage({ onClose }: AdminPageProps) {
         },
         body: JSON.stringify({ title, body }),
       })
-      const data = (await res.json()) as { message?: string; error?: string }
+      const text = await res.text()
+      let data: { message?: string; error?: string } = {}
+      if (text) {
+        try {
+          data = JSON.parse(text) as { message?: string; error?: string }
+        } catch {
+          throw new Error(
+            `Respuesta no JSON (${res.status}): ${text.slice(0, 180)}`,
+          )
+        }
+      }
       if (!res.ok) {
-        throw new Error(data.error ?? `Error ${res.status}`)
+        throw new Error(data.error ?? `Error HTTP ${res.status}${text ? `: ${text.slice(0, 120)}` : ''}`)
       }
       showAdminToast(
         data.message ?? 'Notificación enviada.',

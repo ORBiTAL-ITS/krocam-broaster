@@ -6,6 +6,9 @@
   "functions": {
     "api/send-broadcast-fcm.ts": {
       "maxDuration": 60
+    },
+    "api/notify-new-order-fcm.ts": {
+      "maxDuration": 30
     }
   }
 }

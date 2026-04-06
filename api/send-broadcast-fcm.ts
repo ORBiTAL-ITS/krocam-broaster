@@ -24,6 +24,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  const hasAdminCreds =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim() ||
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim()
+  if (!hasAdminCreds) {
+    return res.status(503).json({
+      error:
+        'Faltan credenciales Admin: en local usa GOOGLE_APPLICATION_CREDENTIALS=./firebase-service-account.json (archivo de Service accounts → Generate new private key). No uses apiKey/appId; es otro JSON.',
+    })
+  }
+
   const authHeader = req.headers.authorization
   const match = authHeader?.match(/^Bearer\s+(.+)$/i)
   const idToken = match?.[1]

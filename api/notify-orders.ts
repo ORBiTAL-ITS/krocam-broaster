@@ -1,12 +1,11 @@
 /**
- * API serverless para notificaciones por WhatsApp y push FCM (sin Cloud Functions de pago).
+ * API serverless para notificaciones push FCM (y opcionalmente WhatsApp vía Meta).
  * Llamar desde cron-job.org cada 5–10 min con ?secret=NOTIFY_CRON_SECRET
  *
  * Env en Vercel:
  * - FIREBASE_SERVICE_ACCOUNT_JSON (JSON completo de la cuenta de servicio)
- * - WHATSAPP_ACCESS_TOKEN (token de Meta)
- * - WHATSAPP_PHONE_NUMBER_ID
  * - NOTIFY_CRON_SECRET
+ * - Si WHATSAPP_CRON_ENABLED: WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID
  *
  * FCM: pedidos recientes → admins; cambio de estado → cliente (campos fcm_* evitan duplicados).
  */
@@ -16,6 +15,9 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { setCors } from '../lib/push-api/cors.js'
 import { getDb } from '../lib/push-api/firebase-admin.js'
 import { getAdminTokens, getTokensForUser, sendToTokens } from '../lib/push-api/fcm.js'
+
+/** Envíos por API de WhatsApp (Meta). Las push de la app siguen con FCM aunque sea false. */
+const WHATSAPP_CRON_ENABLED = false
 
 const STATUS_LABELS: Record<string, string> = {
   pendiente: 'Recibido',
@@ -103,20 +105,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const userId = data?.userId ?? ''
 
       if (createdAt >= since.getTime() && !data?.whatsapp_new_order_sent_at) {
-        const adminSnap = await db.collection('users').where('role', '==', 'admin').get()
-        const totalFormatted = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPrice)
-        const adminsWithPhone = adminSnap.docs.filter((u) => u.data()?.phone)
-        debug.push(`Pedido ${orderId.slice(-6)}: ${adminsWithPhone.length} admins con teléfono`)
-        for (const u of adminSnap.docs) {
-          const phone = u.data()?.phone
-          if (phone) {
-            const result = await sendWhatsAppTemplate(
-              phone,
-              'nuevo_pedido',
-              [`Pedido #${orderId.slice(-6)}`, totalFormatted],
-            )
-            if (result.ok) newOrderCount++
-            else debug.push(`Admin ${phone}: ${result.error}`)
+        if (WHATSAPP_CRON_ENABLED) {
+          const adminSnap = await db.collection('users').where('role', '==', 'admin').get()
+          const totalFormatted = new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            maximumFractionDigits: 0,
+          }).format(totalPrice)
+          const adminsWithPhone = adminSnap.docs.filter((u) => u.data()?.phone)
+          debug.push(`Pedido ${orderId.slice(-6)}: ${adminsWithPhone.length} admins con teléfono`)
+          for (const u of adminSnap.docs) {
+            const phone = u.data()?.phone
+            if (phone) {
+              const result = await sendWhatsAppTemplate(
+                phone,
+                'nuevo_pedido',
+                [`Pedido #${orderId.slice(-6)}`, totalFormatted],
+              )
+              if (result.ok) newOrderCount++
+              else debug.push(`Admin ${phone}: ${result.error}`)
+            }
           }
         }
         await docSnap.ref.update({ whatsapp_new_order_sent_at: FieldValue.serverTimestamp() })
@@ -136,14 +144,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (updatedAt >= since.getTime() && data?.whatsapp_last_status !== status && userId) {
-        const userSnap = await db.collection('users').doc(userId).get()
-        const phone = userSnap.data()?.phone
-        const label = STATUS_LABELS[status] ?? status
-        if (phone) {
-          const result = await sendWhatsAppTemplate(phone, 'estado_pedido', [label])
-          if (result.ok) statusCount++
-          else debug.push(`Cliente ${phone} (${label}): ${result.error}`)
-        } else debug.push(`Cliente ${userId}: sin teléfono en Firestore`)
+        if (WHATSAPP_CRON_ENABLED) {
+          const userSnap = await db.collection('users').doc(userId).get()
+          const phone = userSnap.data()?.phone
+          const label = STATUS_LABELS[status] ?? status
+          if (phone) {
+            const result = await sendWhatsAppTemplate(phone, 'estado_pedido', [label])
+            if (result.ok) statusCount++
+            else debug.push(`Cliente ${phone} (${label}): ${result.error}`)
+          } else debug.push(`Cliente ${userId}: sin teléfono en Firestore`)
+        }
         await docSnap.ref.update({ whatsapp_last_status: status })
       }
 

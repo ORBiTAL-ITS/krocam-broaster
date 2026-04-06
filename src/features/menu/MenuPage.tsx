@@ -40,7 +40,11 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { openWhatsAppWithMessage } from '../../services/whatsappDeepLink'
 import { getWhatsappNumber } from '../../services/appConfig'
+import { notifyAdminsNewOrder } from '../../services/notifyNewOrderPush'
 import { Capacitor } from '@capacitor/core'
+
+/** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
+const OPEN_WHATSAPP_AFTER_ORDER = false
 
 const SECCIONES: Array<{
   id: string
@@ -344,26 +348,34 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
 
     try {
       const docRef = await addDoc(collection(db, 'orders'), orderData)
-      const orderIdShort = docRef.id.slice(-6)
-      const itemsText = items
-        .map((i) => `• ${i.quantity}× ${i.name}`)
-        .join('\n')
-      const totalFormatted = formatCurrency(totalPrice)
-      const whatsappMessage =
-        `¡Hola! Quiero realizar mi pedido:\n\n` +
-        `${itemsText}\n\n` +
-        `Total: ${totalFormatted}\n` +
-        `Dirección: ${deliveryData.address}\n` +
-        `Barrio: ${deliveryData.barrio}\n` +
-        `Tel: ${deliveryData.phone}\n` +
-        (deliveryData.notes ? `Referencias: ${deliveryData.notes}\n` : '') +
-        `\n(Pedido #${orderIdShort})`
 
-      const whatsappNumber = await getWhatsappNumber()
-      const opened = openWhatsAppWithMessage(whatsappMessage, whatsappNumber ?? undefined)
-      if (!opened) {
-        setToastMessage('Configura el número de WhatsApp en el panel de administración para abrir WhatsApp.')
-        setIsToastOpen(true)
+      void notifyAdminsNewOrder(docRef.id).catch((e) => {
+        console.warn('[notifyAdminsNewOrder]', e)
+      })
+
+      if (OPEN_WHATSAPP_AFTER_ORDER) {
+        const orderIdShort = docRef.id.slice(-6)
+        const itemsText = items
+          .map((i) => `• ${i.quantity}× ${i.name}`)
+          .join('\n')
+        const totalFormatted = formatCurrency(totalPrice)
+        const whatsappMessage =
+          `¡Hola! Quiero realizar mi pedido:\n\n` +
+          `${itemsText}\n\n` +
+          `Total: ${totalFormatted}\n` +
+          `Dirección: ${deliveryData.address}\n` +
+          `Barrio: ${deliveryData.barrio}\n` +
+          `Tel: ${deliveryData.phone}\n` +
+          (deliveryData.notes ? `Referencias: ${deliveryData.notes}\n` : '') +
+          `\n(Pedido #${orderIdShort})`
+        const whatsappNumber = await getWhatsappNumber()
+        const opened = openWhatsAppWithMessage(whatsappMessage, whatsappNumber ?? undefined)
+        if (!opened) {
+          setToastMessage(
+            'Configura el número de WhatsApp en el panel de administración para abrir WhatsApp.',
+          )
+          setIsToastOpen(true)
+        }
       }
       // import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
     } catch (err: unknown) {
@@ -385,7 +397,9 @@ export default function MenuPage({ onOpenAdmin, onOpenMyOrders }: MenuPageProps 
     setIsCartOpen(false)
     clear()
     setToastMessage(
-      'Tu pedido fue registrado. Ahora te vamos a llevar a WhatsApp para que envíes el mensaje de confirmación y podamos empezar a preparar tu pedido. Solo revisa y dale ENVIAR.',
+      OPEN_WHATSAPP_AFTER_ORDER
+        ? 'Tu pedido fue registrado. Ahora te vamos a llevar a WhatsApp para que envíes el mensaje de confirmación y podamos empezar a preparar tu pedido. Solo revisa y dale ENVIAR.'
+        : 'Tu pedido fue registrado. Te avisaremos por la app cuando haya novedades.',
     )
     setIsToastOpen(true)
     setTimeout(() => onOpenMyOrders?.(), 1200)
