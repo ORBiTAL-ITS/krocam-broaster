@@ -8,9 +8,9 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getAuth } from 'firebase-admin/auth'
-import { setCors } from '../lib/push-api/cors'
-import { getDb } from '../lib/push-api/firebase-admin'
-import { getAllUserFcmTokens, sendMulticastCountResults } from '../lib/push-api/fcm'
+import { setCors } from '../lib/push-api/cors.js'
+import { getDb } from '../lib/push-api/firebase-admin.js'
+import { getAllUserFcmTokens, sendMulticastCountResults } from '../lib/push-api/fcm.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   setCors(res, req, {
