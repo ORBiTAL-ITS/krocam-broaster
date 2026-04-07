@@ -1,5 +1,5 @@
 import { auth } from '../firebase'
-import { getApiOrigin } from '../config/apiOrigin'
+import { getApiUrl } from '../config/apiOrigin'
 
 type NotifyStatusPayload = {
   ok?: boolean
@@ -20,7 +20,7 @@ export async function notifyCustomerOrderStatus(
   const user = auth.currentUser
   if (!user) return
   const idToken = await user.getIdToken()
-  const res = await fetch(`${getApiOrigin()}/api/notify-order-status-fcm`, {
+  const res = await fetch(getApiUrl('/api/notify-order-status-fcm'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -1,5 +1,5 @@
 import { auth } from '../firebase'
-import { getApiOrigin } from '../config/apiOrigin'
+import { getApiUrl } from '../config/apiOrigin'
 
 /**
  * Dispara FCM a todos los admins con rol en Firestore (misma lógica que el cron).
@@ -9,7 +9,7 @@ export async function notifyAdminsNewOrder(orderId: string): Promise<void> {
   const user = auth.currentUser
   if (!user) return
   const idToken = await user.getIdToken()
-  const res = await fetch(`${getApiOrigin()}/api/notify-new-order-fcm`, {
+  const res = await fetch(getApiUrl('/api/notify-new-order-fcm'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

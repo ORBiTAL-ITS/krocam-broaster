@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { firebaseMessagingSwPlugin } from './vite-plugin-firebase-messaging-sw'
 import { localApiPlugin } from './vite-plugin-local-api'
 
 // https://vite.dev/config/
@@ -17,6 +18,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: './',
-    plugins: [localApiPlugin(), react(), tailwindcss()],
+    plugins: [firebaseMessagingSwPlugin(), localApiPlugin(), react(), tailwindcss()],
   }
 })

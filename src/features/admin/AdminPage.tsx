@@ -29,7 +29,7 @@ import {
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { notificationsOutline } from 'ionicons/icons'
-import { getApiOrigin } from '../../config/apiOrigin'
+import { getApiUrl } from '../../config/apiOrigin'
 import { auth, db } from '../../firebase'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { notifyCustomerOrderStatus } from '../../services/notifyOrderStatusPush'
@@ -336,7 +336,7 @@ export default function AdminPage({ onClose, onOpenNotifications }: AdminPagePro
     setSendingBroadcast(true)
     try {
       const idToken = await user.getIdToken()
-      const res = await fetch(`${getApiOrigin()}/api/send-broadcast-fcm`, {
+      const res = await fetch(getApiUrl('/api/send-broadcast-fcm'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -350,8 +350,11 @@ export default function AdminPage({ onClose, onOpenNotifications }: AdminPagePro
         try {
           data = JSON.parse(text) as { message?: string; error?: string }
         } catch {
+          const looksLikeHtml = /^\s*</.test(text)
           throw new Error(
-            `Respuesta no JSON (${res.status}): ${text.slice(0, 180)}`,
+            looksLikeHtml
+              ? 'El servidor respondió con la página HTML en lugar de la API (ruta /api). Despliega en Vercel con la carpeta api/ o, si la API está en otro dominio solo en web, define VITE_WEB_API_ORIGIN en el build (la config de móvil va aparte: VITE_NATIVE_API_ORIGIN).'
+              : `Respuesta no JSON (${res.status}): ${text.slice(0, 180)}`,
           )
         }
       }

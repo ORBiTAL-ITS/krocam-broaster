@@ -5,6 +5,9 @@ const STATIC_ALLOWED = [
   'http://localhost:5173',
   'http://localhost:5174',
   'https://krocam-broaster.vercel.app',
+  // PWA en Firebase Hosting (estáticos; la API sigue en Vercel)
+  'https://krocam-9a82c.web.app',
+  'https://krocam-9a82c.firebaseapp.com',
   // Capacitor/Ionic WebView (fetch al API en Vercel es cross-origin)
   'capacitor://localhost',
   'ionic://localhost',
@@ -22,6 +25,10 @@ function collectAllowedOrigins(): string[] {
   pushOrigin(out, process.env.VERCEL_URL)
   pushOrigin(out, process.env.VERCEL_BRANCH_URL)
   pushOrigin(out, process.env.VERCEL_PROJECT_PRODUCTION_URL)
+  const extra = process.env.CORS_EXTRA_ORIGINS?.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean) ?? []
+  for (const e of extra) {
+    pushOrigin(out, e)
+  }
   return [...new Set(out)]
 }
 
