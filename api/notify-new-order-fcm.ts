@@ -61,6 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const totalPrice = Number(data?.totalPrice ?? 0)
     const adminTokens = await getAdminTokens(db)
+    const adminIds = await getAdminUserIds(db)
     const totalFormatted = new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
@@ -72,10 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: 'new_order',
       orderId,
     })
-    await orderRef.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })
 
     try {
-      const adminIds = await getAdminUserIds(db)
       await saveInboxForUserIds(db, adminIds, {
         title,
         body: message,
@@ -83,7 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         orderId,
       })
     } catch (inboxErr) {
-      console.error('[notify-new-order-fcm] inbox (FCM ya enviado)', inboxErr)
+      console.error('[notify-new-order-fcm] inbox', inboxErr)
+    }
+
+    // Solo marcar cuando hubo tokens: si no, el cron `notify-orders` puede reintentar el FCM.
+    if (adminTokens.length > 0) {
+      await orderRef.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })
     }
 
     return res.status(200).json({

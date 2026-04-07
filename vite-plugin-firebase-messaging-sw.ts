@@ -59,11 +59,13 @@ self.addEventListener('activate', (event) => {
 
 messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title ?? payload.data?.title ?? 'KROCAM'
+  const body = payload.notification?.body ?? payload.data?.body ?? ''
+  const orderId = typeof payload.data?.orderId === 'string' ? payload.data.orderId : ''
   const options = {
-    body: payload.notification?.body ?? payload.data?.body ?? '',
+    body,
     icon: '/Logo.png',
     badge: '/Logo.png',
-    tag: payload.data?.tag ?? 'order',
+    tag: orderId ? 'order-' + orderId : (payload.data?.tag ?? 'order'),
     data: payload.data ?? {},
   }
   self.registration.showNotification(title, options)

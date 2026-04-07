@@ -38,11 +38,21 @@ function allowedOrigins(): string[] {
   return cached
 }
 
-/** WebView de Capacitor a veces manda localhost con puerto u Origin distinto. */
+/**
+ * Orígenes permitidos para CORS. Incluye patrones amplios porque:
+ * - El cliente que confirma un pedido llama a `/api/notify-new-order-fcm` desde su dominio (p. ej. Firebase Hosting
+ *   o dominio propio). Si el Origin no está permitido, el navegador bloquea la respuesta y los admins no reciben push.
+ * - La ruta sigue exigiendo `Authorization: Bearer` válido y `userId` del pedido = token.
+ */
 function isOriginAllowed(origin: string): boolean {
   if (allowedOrigins().includes(origin)) return true
   if (/^https?:\/\/localhost(?::\d+)?$/i.test(origin)) return true
   if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(origin)) return true
+  // Cualquier subdominio de Firebase Hosting por defecto
+  if (/^https:\/\/[a-z0-9-]+\.web\.app$/i.test(origin)) return true
+  if (/^https:\/\/[a-z0-9-]+\.firebaseapp\.com$/i.test(origin)) return true
+  // Previews y apps en subdominio vercel.app
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return true
   return false
 }
 

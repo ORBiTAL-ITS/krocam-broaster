@@ -132,8 +132,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: 'order_status',
       orderId,
       status,
+      // Redundancia en data: en algunos WebViews/PWA el mensaje en primer plano lee mejor con data.*
+      title,
+      body,
     })
-    await orderRef.update({ fcm_last_status: status })
+
+    // Marcar solo si hubo push o bandeja: si ambos fallan, el admin puede reintentar el mismo estado.
+    if (clientTokens.length > 0 || inboxWritten) {
+      await orderRef.update({ fcm_last_status: status })
+    }
 
     const noFcmTokens = clientTokens.length === 0
 

@@ -130,18 +130,18 @@ export function subscribeWebForegroundPush(): () => void {
   if (!messaging) return () => {}
 
   return onMessage(messaging, (payload: MessagePayload) => {
-    const title = payload.notification?.title ?? 'KROCAM'
-    const body = payload.notification?.body ?? ''
+    const title =
+      payload.notification?.title ?? (payload.data?.title as string | undefined) ?? 'KROCAM'
+    const body =
+      payload.notification?.body ?? (payload.data?.body as string | undefined) ?? ''
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     if (!title && !body) return
     try {
+      const oid = typeof payload.data?.orderId === 'string' ? payload.data.orderId : ''
       new Notification(title, {
         body,
         icon: '/Logo.png',
-        tag:
-          typeof payload.data?.orderId === 'string'
-            ? payload.data.orderId
-            : 'krocam-foreground',
+        tag: oid ? 'order-' + oid : 'krocam-foreground',
       })
     } catch {
       /* Algunos WebViews / Safari pueden rechazar Notification aquí */
