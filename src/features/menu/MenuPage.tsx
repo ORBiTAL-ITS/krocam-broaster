@@ -356,9 +356,15 @@ export default function MenuPage({
     try {
       const docRef = await addDoc(collection(db, 'orders'), orderData)
 
-      void notifyAdminsNewOrder(docRef.id).catch((e) => {
-        console.warn('[notifyAdminsNewOrder]', e)
-      })
+      // Pequeño retraso: el cliente llama a la API en Vercel; dar tiempo a que el pedido exista en Firestore.
+      void (async () => {
+        await new Promise((r) => setTimeout(r, 120))
+        try {
+          await notifyAdminsNewOrder(docRef.id)
+        } catch (e) {
+          console.warn('[notifyAdminsNewOrder]', e)
+        }
+      })()
 
       if (OPEN_WHATSAPP_AFTER_ORDER) {
         const orderIdShort = docRef.id.slice(-6)

@@ -130,14 +130,19 @@ export function subscribeWebForegroundPush(): () => void {
   if (!messaging) return () => {}
 
   return onMessage(messaging, (payload: MessagePayload) => {
+    const data = payload.data
     const title =
-      payload.notification?.title ?? (payload.data?.title as string | undefined) ?? 'KROCAM'
+      payload.notification?.title ??
+      (typeof data?.title === 'string' ? data.title : undefined) ??
+      'KROCAM'
     const body =
-      payload.notification?.body ?? (payload.data?.body as string | undefined) ?? ''
+      payload.notification?.body ??
+      (typeof data?.body === 'string' ? data.body : '') ??
+      ''
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     if (!title && !body) return
     try {
-      const oid = typeof payload.data?.orderId === 'string' ? payload.data.orderId : ''
+      const oid = typeof data?.orderId === 'string' ? data.orderId : ''
       new Notification(title, {
         body,
         icon: '/Logo.png',

@@ -3,6 +3,15 @@ import type { Firestore } from 'firebase-admin/firestore'
 
 const FCM_MULTICAST_LIMIT = 500
 
+/**
+ * Enlace al abrir la notificación en el navegador (PWA). Sin esto, Chrome a veces no muestra
+ * bien la notificación web o el clic no abre la app (Firebase recomienda webpush.fcmOptions.link).
+ * Override: variable de entorno FCM_WEB_PUSH_LINK (p. ej. dominio de Firebase Hosting).
+ */
+const WEB_PUSH_LINK =
+  (typeof process !== 'undefined' && process.env.FCM_WEB_PUSH_LINK?.trim()) ||
+  'https://krocam-9a82c.web.app'
+
 export async function getTokensForUser(db: Firestore, uid: string): Promise<string[]> {
   const userSnap = await db.collection('users').doc(uid).get()
   const raw = userSnap.data()?.fcmTokens
@@ -92,6 +101,9 @@ function sendToTokens(
         apns: { payload: { aps: { sound: 'default' } } },
         webpush: {
           notification: { title, body },
+          fcmOptions: {
+            link: WEB_PUSH_LINK,
+          },
           headers: {
             Urgency: 'high',
             TTL: '86400',
@@ -122,6 +134,9 @@ export async function sendMulticastCountResults(
       apns: { payload: { aps: { sound: 'default' } } },
       webpush: {
         notification: { title, body },
+        fcmOptions: {
+          link: WEB_PUSH_LINK,
+        },
         headers: {
           Urgency: 'high',
           TTL: '86400',

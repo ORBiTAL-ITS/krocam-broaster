@@ -7,7 +7,7 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Dispara FCM a todos los admins con rol en Firestore (misma lógica que el cron).
- * Reintenta ante fallos de red/CORS intermitentes. No bloquea el flujo del pedido si tras reintentos sigue fallando.
+ * Reintenta ante fallos de red/CORS y 404 (pedido aún no visible en el servidor).
  */
 export async function notifyAdminsNewOrder(orderId: string): Promise<void> {
   const user = auth.currentUser
@@ -17,7 +17,7 @@ export async function notifyAdminsNewOrder(orderId: string): Promise<void> {
   const body = JSON.stringify({ orderId })
   let lastErr: unknown
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const idToken = await user.getIdToken(attempt > 0)
       const res = await fetch(url, {
@@ -28,6 +28,10 @@ export async function notifyAdminsNewOrder(orderId: string): Promise<void> {
         },
         body,
       })
+      if (res.status === 404 && attempt < 5) {
+        await sleep(200 + attempt * 150)
+        continue
+      }
       if (!res.ok) {
         const text = await res.text()
         throw new Error(text || `HTTP ${res.status}`)
@@ -35,7 +39,7 @@ export async function notifyAdminsNewOrder(orderId: string): Promise<void> {
       return
     } catch (e) {
       lastErr = e
-      if (attempt < 2) await sleep(600 * (attempt + 1))
+      if (attempt < 5) await sleep(400 + attempt * 200)
     }
   }
 

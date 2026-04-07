@@ -47,7 +47,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authAdmin = getAuth()
     const decoded = await authAdmin.verifyIdToken(idToken)
     const orderRef = db.collection('orders').doc(orderId)
-    const orderSnap = await orderRef.get()
+    // A veces el doc aún no replica en la primera lectura justo tras addDoc (cliente → API).
+    let orderSnap = await orderRef.get()
+    for (let attempt = 0; attempt < 5 && !orderSnap.exists; attempt++) {
+      await new Promise((r) => setTimeout(r, 120 * (attempt + 1)))
+      orderSnap = await orderRef.get()
+    }
     if (!orderSnap.exists) {
       return res.status(404).json({ error: 'Pedido no encontrado.' })
     }
@@ -72,6 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sendToTokens(adminTokens, title, message, {
       type: 'new_order',
       orderId,
+      title,
+      body: message,
     })
 
     try {
