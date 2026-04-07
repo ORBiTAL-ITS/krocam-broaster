@@ -94,7 +94,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (data?.fcm_last_status === status) {
-      return res.status(200).json({ ok: true, skipped: true })
+      return res.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: 'already_notified_for_this_status',
+        detail:
+          'Este pedido ya tiene fcm_last_status igual a este estado; no se reenvía push ni bandeja.',
+      })
     }
 
     const label = STATUS_LABELS[status] ?? status
@@ -105,13 +111,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : `${label}.`
 
     const clientTokens = await getTokensForUser(db, userId)
-    await sendToTokens(clientTokens, title, body, {
-      type: 'order_status',
-      orderId,
-      status,
-    })
-    await orderRef.update({ fcm_last_status: status })
 
+    let inboxWritten = false
+    let inboxError: string | undefined
     try {
       await saveInboxNotification(db, userId, {
         title,
@@ -120,14 +122,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         orderId,
         status,
       })
+      inboxWritten = true
     } catch (inboxErr) {
-      console.error('[notify-order-status-fcm] inbox (FCM ya enviado)', inboxErr)
+      inboxError = inboxErr instanceof Error ? inboxErr.message : String(inboxErr)
+      console.error('[notify-order-status-fcm] inbox', inboxErr)
     }
+
+    await sendToTokens(clientTokens, title, body, {
+      type: 'order_status',
+      orderId,
+      status,
+    })
+    await orderRef.update({ fcm_last_status: status })
+
+    const noFcmTokens = clientTokens.length === 0
 
     return res.status(200).json({
       ok: true,
-      sent: clientTokens.length > 0,
+      skipped: false,
+      sent: !noFcmTokens,
       devices: clientTokens.length,
+      inboxWritten,
+      inboxError: inboxError ?? null,
+      /** Últimos 6 del userId del pedido (para comprobar en Firestore que coincide con el cliente). */
+      orderUserIdSuffix: userId.length > 6 ? userId.slice(-6) : userId,
+      hint: noFcmTokens
+        ? 'Sin token FCM en users/{uid}/fcmTokens para ese cliente: no llegará push hasta que abra la app, inicie sesión y acepte notificaciones (o use la bandeja si inboxWritten es true).'
+        : !inboxWritten
+          ? 'Push enviado pero la bandeja no se guardó; revisa inboxError y logs del servidor.'
+          : null,
     })
   } catch (e) {
     const err = e as { code?: string }

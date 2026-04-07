@@ -59,6 +59,16 @@ export async function getUserIdsWithFcmTokens(db: Firestore): Promise<string[]> 
   return ids
 }
 
+/** FCM exige que todas las claves/valores de `data` sean strings. */
+function normalizeFcmData(data?: Record<string, string>): Record<string, string> {
+  if (!data) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(data)) {
+    out[k] = typeof v === 'string' ? v : String(v ?? '')
+  }
+  return out
+}
+
 function sendToTokens(
   tokenList: string[],
   title: string,
@@ -67,7 +77,7 @@ function sendToTokens(
 ) {
   const messaging = getMessaging()
   if (tokenList.length === 0) return Promise.resolve()
-  const dataPayload = data ?? {}
+  const dataPayload = normalizeFcmData(data)
   const chunks: string[][] = []
   for (let i = 0; i < tokenList.length; i += FCM_MULTICAST_LIMIT) {
     chunks.push(tokenList.slice(i, i + FCM_MULTICAST_LIMIT))
@@ -107,7 +117,7 @@ export async function sendMulticastCountResults(
     const res = await messaging.sendEachForMulticast({
       tokens,
       notification: { title, body },
-      data,
+      data: normalizeFcmData(data),
       android: { priority: 'high' },
       apns: { payload: { aps: { sound: 'default' } } },
       webpush: {

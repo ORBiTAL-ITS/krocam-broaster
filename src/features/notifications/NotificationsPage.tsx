@@ -45,9 +45,11 @@ export default function NotificationsPage({ onClose }: NotificationsPageProps) {
   const { user } = useAuth()
   const [items, setItems] = useState<InboxDoc[]>([])
   const [loading, setLoading] = useState(true)
+  const [inboxQueryError, setInboxQueryError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
+    setInboxQueryError(null)
     const q = query(
       collection(db, 'users', user.uid, 'inbox'),
       orderBy('createdAt', 'desc'),
@@ -73,7 +75,13 @@ export default function NotificationsPage({ onClose }: NotificationsPageProps) {
         )
         setLoading(false)
       },
-      () => setLoading(false),
+      (err) => {
+        console.error('[NotificationsPage] inbox query', err)
+        setInboxQueryError(
+          err instanceof Error ? err.message : 'No se pudo cargar la bandeja (índice o reglas).',
+        )
+        setLoading(false)
+      },
     )
     return () => unsub()
   }, [user])
@@ -106,6 +114,11 @@ export default function NotificationsPage({ onClose }: NotificationsPageProps) {
         </IonToolbar>
       </IonHeader>
       <IonContent className="ion-padding">
+        {inboxQueryError && (
+          <div className="max-w-lg mx-auto mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {inboxQueryError}
+          </div>
+        )}
         {loading ? (
           <div className="flex justify-center py-12">
             <IonSpinner name="crescent" color="warning" />
