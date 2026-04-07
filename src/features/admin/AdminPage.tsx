@@ -384,16 +384,17 @@ export default function AdminPage({ onClose, onOpenNotifications }: AdminPagePro
               <IonButton
                 fill="clear"
                 color="light"
-                className="relative"
                 onClick={onOpenNotifications}
                 aria-label="Notificaciones"
               >
-                <IonIcon icon={notificationsOutline} />
-                {inboxUnread > 0 && (
-                  <span className="absolute top-0 right-0 min-w-[1rem] h-[1rem] px-0.5 rounded-full bg-(--krocam-red) text-white text-[10px] font-bold flex items-center justify-center">
-                    {inboxUnread > 9 ? '9+' : inboxUnread}
-                  </span>
-                )}
+                <span className="relative inline-flex shrink-0 items-center justify-center">
+                  <IonIcon icon={notificationsOutline} className="text-xl text-white/95" />
+                  {inboxUnread > 0 && (
+                    <span className="pointer-events-none absolute -right-1 -top-1 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border-2 border-(--krocam-black) bg-(--krocam-red) px-0.5 text-[9px] font-bold leading-none text-white shadow-sm">
+                      {inboxUnread > 9 ? '9+' : inboxUnread}
+                    </span>
+                  )}
+                </span>
               </IonButton>
             )}
             <IonButton fill="clear" color="light" onClick={onClose}>

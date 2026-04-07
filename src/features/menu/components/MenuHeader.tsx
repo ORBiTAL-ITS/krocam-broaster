@@ -54,19 +54,21 @@ export function MenuHeader({
               <IonButton
                 fill="clear"
                 color="light"
-                className="relative min-w-[44px] min-h-[44px] [--padding-start:8px] [--padding-end:8px] touch-manipulation"
+                className="min-w-[44px] min-h-[44px] [--padding-start:8px] [--padding-end:8px] touch-manipulation"
                 onClick={onOpenNotifications}
                 aria-label="Notificaciones"
               >
-                <IonIcon
-                  icon={notificationsOutline}
-                  className="text-[1.65rem] text-white/95 drop-shadow-sm"
-                />
-                {inboxUnreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[1rem] h-[1rem] px-0.5 rounded-full bg-(--krocam-red) text-white text-[9px] font-bold flex items-center justify-center border-2 border-(--krocam-black) shadow-sm">
-                    {inboxUnreadCount > 9 ? '9+' : inboxUnreadCount}
-                  </span>
-                )}
+                <span className="relative inline-flex shrink-0 items-center justify-center">
+                  <IonIcon
+                    icon={notificationsOutline}
+                    className="text-[1.65rem] text-white/95 drop-shadow-sm"
+                  />
+                  {inboxUnreadCount > 0 && (
+                    <span className="pointer-events-none absolute -right-1 -top-1 z-10 flex h-4.5 min-w-4.5 items-center justify-center rounded-full border-2 border-(--krocam-black) bg-(--krocam-red) px-0.5 text-[9px] font-bold leading-none text-white shadow-sm">
+                      {inboxUnreadCount > 9 ? '9+' : inboxUnreadCount}
+                    </span>
+                  )}
+                </span>
               </IonButton>
             )}
             <div className="hidden md:flex items-center gap-2">
