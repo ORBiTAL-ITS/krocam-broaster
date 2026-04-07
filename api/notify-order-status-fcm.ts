@@ -50,8 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!orderId) {
     return res.status(400).json({ error: 'orderId requerido.' })
   }
-  if (!statusFromClient || !ALLOWED_STATUS.has(statusFromClient)) {
-    return res.status(400).json({ error: 'status inválido o faltante.' })
+  if (statusFromClient && !ALLOWED_STATUS.has(statusFromClient)) {
+    return res.status(400).json({ error: 'status inválido.' })
   }
 
   try {
@@ -74,8 +74,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Pedido sin cliente (userId).' })
     }
 
-    const status = statusFromClient
     const fsStatus = String(data?.status ?? 'pendiente')
+    const status =
+      statusFromClient && ALLOWED_STATUS.has(statusFromClient)
+        ? statusFromClient
+        : ALLOWED_STATUS.has(fsStatus)
+          ? fsStatus
+          : ''
+    if (!status) {
+      return res.status(400).json({ error: 'status inválido o faltante.' })
+    }
+
     if (fsStatus !== status) {
       console.warn('[notify-order-status-fcm] status Firestore distinto al del cliente', {
         orderId,
@@ -101,14 +110,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       orderId,
       status,
     })
-    await saveInboxNotification(db, userId, {
-      title,
-      body,
-      kind: 'order_status',
-      orderId,
-      status,
-    })
     await orderRef.update({ fcm_last_status: status })
+
+    try {
+      await saveInboxNotification(db, userId, {
+        title,
+        body,
+        kind: 'order_status',
+        orderId,
+        status,
+      })
+    } catch (inboxErr) {
+      console.error('[notify-order-status-fcm] inbox (FCM ya enviado)', inboxErr)
+    }
 
     return res.status(200).json({
       ok: true,

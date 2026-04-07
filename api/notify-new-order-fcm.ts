@@ -72,14 +72,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: 'new_order',
       orderId,
     })
-    const adminIds = await getAdminUserIds(db)
-    await saveInboxForUserIds(db, adminIds, {
-      title,
-      body: message,
-      kind: 'new_order',
-      orderId,
-    })
     await orderRef.update({ fcm_new_order_sent_at: FieldValue.serverTimestamp() })
+
+    try {
+      const adminIds = await getAdminUserIds(db)
+      await saveInboxForUserIds(db, adminIds, {
+        title,
+        body: message,
+        kind: 'new_order',
+        orderId,
+      })
+    } catch (inboxErr) {
+      console.error('[notify-new-order-fcm] inbox (FCM ya enviado)', inboxErr)
+    }
 
     return res.status(200).json({
       ok: true,
