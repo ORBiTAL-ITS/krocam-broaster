@@ -19,8 +19,31 @@ import {
 import { Geolocation } from '@capacitor/geolocation'
 import { Capacitor } from '@capacitor/core'
 import { closeOutline } from 'ionicons/icons'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
+
+const profileStorageKey = (uid: string) => `krocam_profile_form_${uid}`
+
+function readStoredProfile(uid: string): {
+  phone?: string
+  barrio?: string
+  address?: string
+  notes?: string
+} {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(profileStorageKey(uid))
+    if (!raw) return {}
+    return JSON.parse(raw) as {
+      phone?: string
+      barrio?: string
+      address?: string
+      notes?: string
+    }
+  } catch {
+    return {}
+  }
+}
 
 export interface CheckoutDeliveryData {
   phone: string
@@ -45,7 +68,8 @@ export function CheckoutModal({
   formatCurrency,
   onFinishOrder,
 }: CheckoutModalProps) {
-  const { profile } = useAuth()
+  const { profile, profileLoading, user } = useAuth()
+  const checkoutWasOpenRef = useRef(false)
 
   const [deliveryPhone, setDeliveryPhone] = useState('')
   const [deliveryBarrio, setDeliveryBarrio] = useState('')
@@ -59,17 +83,47 @@ export function CheckoutModal({
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    if (isOpen && profile) {
-      setDeliveryPhone(profile.phone ?? '')
-      setDeliveryBarrio(profile.barrio ?? '')
-      setDeliveryAddress(profile.address ?? '')
-      setDeliveryNotes(profile.notes ?? '')
+    if (isOpen) return
+    checkoutWasOpenRef.current = false
+    setCoords(null)
+    setLocationError(null)
+  }, [isOpen])
+
+  /**
+   * - Al abrir: cargar teléfono/dirección desde Firebase y, si faltan, desde localStorage.
+   * - Mientras el modal sigue abierto: si el perfil llega tarde o se refresca, solo rellenar
+   *   campos vacíos para no borrar lo que el usuario ya escribió.
+   */
+  useEffect(() => {
+    if (!isOpen || !user?.uid) return
+
+    const stored = readStoredProfile(user.uid)
+    const p = profile
+    const merged = {
+      phone: p?.phone?.trim() || stored.phone?.trim() || '',
+      barrio: p?.barrio?.trim() || stored.barrio?.trim() || '',
+      address: p?.address?.trim() || stored.address?.trim() || '',
+      notes: p?.notes?.trim() || stored.notes?.trim() || '',
     }
-    if (!isOpen) {
-      setCoords(null)
-      setLocationError(null)
+
+    const justOpened = !checkoutWasOpenRef.current
+    checkoutWasOpenRef.current = true
+
+    if (justOpened) {
+      setDeliveryPhone(merged.phone)
+      setDeliveryBarrio(merged.barrio)
+      setDeliveryAddress(merged.address)
+      setDeliveryNotes(merged.notes)
+      return
     }
-  }, [isOpen, profile])
+
+    if (profileLoading) return
+
+    setDeliveryPhone(prev => prev.trim() || merged.phone)
+    setDeliveryBarrio(prev => prev.trim() || merged.barrio)
+    setDeliveryAddress(prev => prev.trim() || merged.address)
+    setDeliveryNotes(prev => prev.trim() || merged.notes)
+  }, [isOpen, user?.uid, profile, profileLoading])
 
   const handleUseCurrentLocation = async () => {
     const isNative = Capacitor.isNativePlatform()

@@ -383,18 +383,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const ref = doc(db, 'users', user.uid)
-    await setDoc(
-      ref,
-      {
-        phone: String(data.phone).trim(),
-        barrio: String(data.barrio).trim(),
-        address: String(data.address).trim(),
-        notes: data.notes ? String(data.notes).trim() : '',
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      },
-      { merge: true }
-    )
+    const existing = await getDoc(ref)
+    const payload: Record<string, unknown> = {
+      phone: String(data.phone).trim(),
+      barrio: String(data.barrio).trim(),
+      address: String(data.address).trim(),
+      notes: data.notes ? String(data.notes).trim() : '',
+      updatedAt: serverTimestamp(),
+    }
+    if (!existing.exists()) {
+      payload.createdAt = serverTimestamp()
+    }
+    await setDoc(ref, payload, { merge: true })
+
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          `krocam_profile_form_${user.uid}`,
+          JSON.stringify({
+            phone: payload.phone,
+            barrio: payload.barrio,
+            address: payload.address,
+            notes: payload.notes,
+          }),
+        )
+      }
+    } catch {
+      // Storage no disponible (p. ej. modo privado)
+    }
 
     setProfile(prev => ({
       phone: data.phone,
