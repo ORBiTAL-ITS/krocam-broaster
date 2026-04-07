@@ -234,14 +234,25 @@ export default function AdminPage({ onClose, onOpenNotifications }: AdminPagePro
         status: newStatus,
         updatedAt: serverTimestamp(),
       })
-      // import('../../services/notifyWhatsApp').then((m) => m.triggerNotifyOrders())
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
       )
-      void notifyCustomerOrderStatus(orderId, newStatus).catch((e) => {
+      try {
+        await notifyCustomerOrderStatus(orderId, newStatus)
+      } catch (e) {
         console.warn('[notifyCustomerOrderStatus]', e)
-      })
-      showAdminToast('Estado actualizado. El cliente recibirá una notificación en la app.')
+        showAdminToast(
+          'El estado se guardó, pero no se envió la notificación al cliente. Revisa la conexión o vuelve a elegir el mismo estado.',
+          'warning',
+          4200,
+        )
+        return
+      }
+      const pushHint =
+        newStatus === 'despachado'
+          ? ' El cliente recibirá aviso de que su pedido fue despachado y va en camino.'
+          : ' El cliente recibirá una notificación en la app.'
+      showAdminToast(`Estado actualizado.${pushHint}`)
     } catch {
       showAdminToast('No se pudo actualizar el estado.', 'danger')
     } finally {

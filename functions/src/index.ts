@@ -208,7 +208,10 @@ export const onOrderUpdated = onDocumentUpdated('orders/{orderId}', async (event
   if (!userId) return
   const label = STATUS_LABELS[statusAfter] ?? statusAfter
   const title = 'Estado de tu pedido'
-  const body = `${label}.`
+  const body =
+    statusAfter === 'despachado'
+      ? 'Tu pedido fue despachado y va en camino. ¡Gracias por tu compra!'
+      : `${label}.`
   const payload = {
     type: 'order_status',
     orderId: event.params.orderId,
