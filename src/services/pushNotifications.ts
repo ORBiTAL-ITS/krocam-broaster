@@ -18,6 +18,32 @@ import { messaging, db } from '../firebase'
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined
 
 /**
+ * iOS (Safari y PWA instalada) exige que `Notification.requestPermission()` se invoque
+ * en respuesta a un gesto del usuario. Un `useEffect` tras el login no cumple esa regla
+ * y el permiso no se concede → no hay token FCM en Firestore.
+ * @see https://developer.apple.com/documentation/usernotifications/sending_web_push_notifications_in_web_apps_safari_and_other_browsers
+ */
+export function webPushRequiresUserGesture(): boolean {
+  if (typeof window === 'undefined') return false
+  if (Capacitor.isNativePlatform()) return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/.test(ua)) return true
+  // iPadOS 13+ puede reportarse como MacIntel con touch
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true
+  return false
+}
+
+/** Banner “Activar notificaciones”: iOS siempre; en móvil estrecho también si el permiso sigue en “preguntar”. */
+export function shouldShowWebPushActivationBanner(): boolean {
+  if (typeof window === 'undefined') return false
+  if (Capacitor.isNativePlatform()) return false
+  if (typeof Notification === 'undefined') return false
+  if (Notification.permission !== 'default') return false
+  if (webPushRequiresUserGesture()) return true
+  return window.matchMedia('(max-width: 768px)').matches
+}
+
+/**
  * Registra el dispositivo para recibir notificaciones push y guarda el token en Firestore.
  * En app nativa (Android/iOS) usa el plugin FCM; en navegador usa el Service Worker.
  */

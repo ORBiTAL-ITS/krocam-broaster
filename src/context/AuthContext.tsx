@@ -22,6 +22,7 @@ import { auth, db, googleProvider, redirectResultPromise } from '../firebase'
 import {
   registerPushNotifications,
   subscribeWebForegroundPush,
+  webPushRequiresUserGesture,
 } from '../services/pushNotifications'
 
 interface AuthContextValue {
@@ -256,6 +257,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     if (!user?.uid) return
+    // iOS Safari/PWA: el permiso push debe pedirse con un gesto del usuario (banner en MenuPage).
+    if (webPushRequiresUserGesture()) return
     registerPushNotifications(user.uid).catch(() => {})
   }, [user?.uid])
 
@@ -264,6 +267,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!user?.uid) return
     if (Capacitor.isNativePlatform()) return
+    if (webPushRequiresUserGesture()) return
 
     const uid = user.uid
     let lastRegisterAt = 0

@@ -43,6 +43,7 @@ import { getWhatsappNumber } from '../../services/appConfig'
 import { notifyAdminsNewOrder } from '../../services/notifyNewOrderPush'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { Capacitor } from '@capacitor/core'
+import { WebPushActivationBanner } from '../../components/WebPushActivationBanner'
 
 /** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
 const OPEN_WHATSAPP_AFTER_ORDER = false
@@ -461,6 +462,7 @@ export default function MenuPage({
       />
       <IonContent className="ion-padding carta-content">
         <div className="max-w-5xl mx-auto py-6">
+          <WebPushActivationBanner />
           <CartaMenu
             sectionTitle={title}
             combos={combos}
