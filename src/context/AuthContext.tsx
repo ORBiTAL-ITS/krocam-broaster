@@ -17,10 +17,7 @@ import {
   signOut,
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import {
-  deactivateUserAccount,
-  reactivateUserAccount,
-} from '../services/accountService'
+import { deleteUserAccount } from '../services/accountService'
 import { Capacitor } from '@capacitor/core'
 import { SocialLogin } from '@capgo/capacitor-social-login'
 import {
@@ -45,7 +42,7 @@ interface AuthContextValue {
   loginWithApple: () => Promise<void>
   logout: () => Promise<void>
   saveProfile: (data: UserProfileInput) => Promise<void>
-  deactivateAccount: () => Promise<void>
+  deleteAccount: (options?: { signOut?: boolean }) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -61,7 +58,7 @@ export interface UserProfile {
   notes?: string
   /** Solo se asigna desde Firebase (consola); la app nunca escribe este campo. */
   role?: 'admin' | 'customer'
-  /** false = cuenta desactivada por el usuario; al volver a iniciar sesión se reactiva. */
+  /** false = cuenta eliminada por el usuario. */
   active?: boolean
   createdAt?: Date
   updatedAt?: Date
@@ -190,7 +187,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (snap.exists()) {
           const data = snap.data()
           if (data.active === false) {
-            await reactivateUserAccount(firebaseUser.uid)
+            setProfile(null)
+            setProfileLoading(false)
+            setLoading(false)
+            return
           }
           const rawRole =
             typeof data.role === 'string' ? data.role.trim().toLowerCase() : ''
@@ -525,16 +525,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }))
   }
 
-  const deactivateAccount = async () => {
+  const deleteAccount = async (options?: { signOut?: boolean }) => {
     if (!user) {
       throw new Error('No hay usuario autenticado.')
     }
     if (profile?.role === 'admin') {
       throw new Error(
-        'Las cuentas de administrador no se pueden desactivar desde la app. Contacta soporte técnico.',
+        'Las cuentas de administrador no se pueden eliminar desde la app. Contacta soporte técnico.',
       )
     }
-    await deactivateUserAccount(user.uid)
+    await deleteUserAccount(user.uid)
     try {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(`krocam_profile_form_${user.uid}`)
@@ -543,7 +543,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // ignorar
     }
     setStoredAdminUid(null)
-    await signOut(auth)
+    setProfile(null)
+    if (options?.signOut !== false) {
+      await signOut(auth)
+    }
   }
 
   const value: AuthContextValue = {
@@ -555,7 +558,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loginWithApple,
     logout,
     saveProfile,
-    deactivateAccount,
+    deleteAccount,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,5 +1,5 @@
 /**
- * Mi cuenta: datos de entrega, cerrar sesión y desactivar cuenta.
+ * Mi cuenta: datos de entrega, cerrar sesión y eliminar cuenta.
  */
 
 import {
@@ -28,17 +28,18 @@ import { ROUTES } from '../../routes/paths'
 export default function AccountPage() {
   const history = useHistory()
   const showBottomTabs = useShowBottomTabs()
-  const { user, profile, profileLoading, saveProfile, logout, deactivateAccount } = useAuth()
+  const { user, profile, profileLoading, saveProfile, logout, deleteAccount } = useAuth()
 
   const [phone, setPhone] = useState('')
   const [barrio, setBarrio] = useState('')
   const [address, setAddress] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
-  const [deactivating, setDeactivating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [confirmDeactivate, setConfirmDeactivate] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showDeletedAlert, setShowDeletedAlert] = useState(false)
 
   useEffect(() => {
     if (profileLoading || !profile) return
@@ -67,20 +68,20 @@ export default function AccountPage() {
     }
   }
 
-  const handleDeactivate = async () => {
+  const handleDelete = async () => {
     setError(null)
-    setDeactivating(true)
+    setDeleting(true)
     try {
-      await deactivateAccount()
-      history.replace(ROUTES.HOME)
+      await deleteAccount({ signOut: false })
+      setShowDeletedAlert(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'No se pudo desactivar la cuenta.')
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar la cuenta.')
     } finally {
-      setDeactivating(false)
+      setDeleting(false)
     }
   }
 
-  const isBusy = profileLoading || saving || deactivating
+  const isBusy = profileLoading || saving || deleting
   const isAdmin = profile?.role === 'admin'
 
   return (
@@ -101,7 +102,7 @@ export default function AccountPage() {
       </IonHeader>
 
       <IonContent className="ion-padding bg-gray-50">
-        <IonLoading isOpen={isBusy} message={deactivating ? 'Desactivando cuenta…' : 'Guardando…'} />
+        <IonLoading isOpen={isBusy} message={deleting ? 'Eliminando cuenta…' : 'Guardando…'} />
 
         <div className="max-w-lg mx-auto py-4 space-y-6">
           {user?.email && (
@@ -188,48 +189,49 @@ export default function AccountPage() {
 
           {!isAdmin && (
             <section className="rounded-2xl border border-red-200 bg-red-50/80 p-5">
-              <h2 className="krocam-font-title text-base font-bold text-red-900 mb-2">
-                Eliminar mi cuenta
-              </h2>
-              <p className="text-xs text-red-800/90 leading-relaxed mb-4">
-                Tu cuenta quedará <strong>inactiva</strong> y cerraremos tu sesión. No borramos tu
-                historial de pedidos por requisitos del negocio. Si vuelves a iniciar sesión con la
-                misma cuenta de Google, tu perfil se <strong>reactivará</strong> automáticamente.
-              </p>
               <IonButton
                 expand="block"
                 color="danger"
                 fill="outline"
                 disabled={isBusy}
-                onClick={() => setConfirmDeactivate(true)}
+                onClick={() => setConfirmDelete(true)}
               >
-                Desactivar mi cuenta
+                Eliminar cuenta
               </IonButton>
             </section>
           )}
 
           {isAdmin && (
             <p className="text-xs text-gray-500 text-center px-2">
-              Las cuentas de administrador no pueden desactivarse desde aquí.
+              Las cuentas de administrador no pueden eliminarse desde aquí.
             </p>
           )}
         </div>
 
         <IonAlert
-          isOpen={confirmDeactivate}
-          onDidDismiss={() => setConfirmDeactivate(false)}
-          header="¿Desactivar tu cuenta?"
-          message="Podrás volver cuando quieras iniciando sesión otra vez con Google. Tu sesión se cerrará ahora."
+          isOpen={confirmDelete}
+          onDidDismiss={() => setConfirmDelete(false)}
+          header="¿Eliminar tu cuenta?"
           buttons={[
             { text: 'Cancelar', role: 'cancel' },
             {
-              text: 'Sí, desactivar',
+              text: 'Eliminar',
               role: 'destructive',
               handler: () => {
-                void handleDeactivate()
+                void handleDelete()
               },
             },
           ]}
+        />
+
+        <IonAlert
+          isOpen={showDeletedAlert}
+          onDidDismiss={() => {
+            setShowDeletedAlert(false)
+            void logout().then(() => history.replace(ROUTES.HOME))
+          }}
+          message="Tu cuenta fue eliminada."
+          buttons={['Entendido']}
         />
       </IonContent>
     </IonPage>
