@@ -9,6 +9,7 @@ import {
 import {
   type User,
   GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInWithCredential,
   signInWithPopup,
@@ -22,7 +23,13 @@ import {
 } from '../services/accountService'
 import { Capacitor } from '@capacitor/core'
 import { SocialLogin } from '@capgo/capacitor-social-login'
-import { auth, db, googleProvider, redirectResultPromise } from '../firebase'
+import {
+  auth,
+  appleProvider,
+  db,
+  googleProvider,
+  redirectResultPromise,
+} from '../firebase'
 import {
   registerPushNotifications,
   subscribeWebForegroundPush,
@@ -35,6 +42,7 @@ interface AuthContextValue {
   profile: UserProfile | null
   profileLoading: boolean
   loginWithGoogle: () => Promise<void>
+  loginWithApple: () => Promise<void>
   logout: () => Promise<void>
   saveProfile: (data: UserProfileInput) => Promise<void>
   deactivateAccount: () => Promise<void>
@@ -73,6 +81,10 @@ const GOOGLE_IOS_CLIENT_ID = import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID as
 const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID as
   | string
   | undefined
+const APPLE_CLIENT_ID = import.meta.env.VITE_APPLE_CLIENT_ID as string | undefined
+const FIREBASE_AUTH_DOMAIN = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as
+  | string
+  | undefined
 
 const ADMIN_UID_STORAGE_KEY = 'krocam:adminUid'
 
@@ -106,13 +118,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profileLoading, setProfileLoading] = useState(true)
   const mountedRef = useRef(true)
 
-  // Inicialización SocialLogin (Google) en entornos nativos.
+  // Inicialización SocialLogin (Google y Apple) en entornos nativos.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
     const platform = Capacitor.getPlatform()
     const iosClientId = GOOGLE_IOS_CLIENT_ID?.trim()
     const webClientId = GOOGLE_WEB_CLIENT_ID?.trim()
+    const appleClientId = APPLE_CLIENT_ID?.trim()
+    const authDomain = FIREBASE_AUTH_DOMAIN?.trim()
+
+    const initPayload: Parameters<typeof SocialLogin.initialize>[0] = {}
 
     const googleConfig: {
       iOSClientId?: string
@@ -130,17 +146,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
       googleConfig.webClientId = webClientId
     }
 
-    // Si no tenemos ningún ID válido para esta plataforma, no inicializamos.
-    if (
-      (platform === 'ios' && !googleConfig.iOSClientId) ||
-      (platform === 'android' && !googleConfig.webClientId)
-    ) {
-      return
+    const canInitGoogle =
+      (platform === 'ios' && !!googleConfig.iOSClientId) ||
+      (platform === 'android' && !!googleConfig.webClientId)
+
+    if (canInitGoogle) {
+      initPayload.google = googleConfig
     }
 
-    SocialLogin.initialize({
-      google: googleConfig,
-    }).catch(() => {
+    if (platform === 'ios') {
+      initPayload.apple = { redirectUrl: '' }
+    } else if (platform === 'android' && appleClientId && authDomain) {
+      initPayload.apple = {
+        clientId: appleClientId,
+        redirectUrl: `https://${authDomain}/__/auth/handler`,
+        useBroadcastChannel: true,
+      }
+    }
+
+    if (!initPayload.google && !initPayload.apple) return
+
+    SocialLogin.initialize(initPayload).catch(() => {
       // Ignorar errores de inicialización; se manejarán al intentar loguear.
     })
   }, [])
@@ -318,6 +344,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return subscribeWebForegroundPush()
   }, [user?.uid])
 
+  const signInWithOAuthPopupOrRedirect = async (
+    provider: typeof googleProvider | typeof appleProvider,
+  ) => {
+    try {
+      await signInWithPopup(auth, provider)
+    } catch (err: unknown) {
+      const code =
+        err && typeof err === 'object' && 'code' in err
+          ? (err as { code: string }).code
+          : ''
+      const useRedirect =
+        code === 'auth/popup-blocked' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/popup-closed-by-user'
+      if (useRedirect) {
+        await signInWithRedirect(auth, provider)
+      } else {
+        throw err
+      }
+    }
+  }
+
   const loginWithGoogle = async () => {
     const isNative = Capacitor.isNativePlatform()
 
@@ -371,24 +419,56 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
 
-    // En web (navegador): popup y, si falla, redirect.
-    try {
-      await signInWithPopup(auth, googleProvider)
-    } catch (err: unknown) {
-      const code =
-        err && typeof err === 'object' && 'code' in err
-          ? (err as { code: string }).code
-          : ''
-      const useRedirect =
-        code === 'auth/popup-blocked' ||
-        code === 'auth/cancelled-popup-request' ||
-        code === 'auth/popup-closed-by-user'
-      if (useRedirect) {
-        await signInWithRedirect(auth, googleProvider)
-      } else {
-        throw err
+    await signInWithOAuthPopupOrRedirect(googleProvider)
+  }
+
+  const loginWithApple = async () => {
+    const isNative = Capacitor.isNativePlatform()
+
+    if (isNative) {
+      try {
+        const res = await SocialLogin.login({
+          provider: 'apple',
+          options: { scopes: ['email', 'name'] },
+        })
+
+        const idToken =
+          res.provider === 'apple' ? res.result.idToken : undefined
+
+        if (!idToken) {
+          throw new Error(
+            'No se obtuvo el token de Apple en el dispositivo. Intenta nuevamente.',
+          )
+        }
+
+        const credential = new OAuthProvider('apple.com').credential({
+          idToken,
+        })
+        await signInWithCredential(auth, credential)
+        return
+      } catch (err) {
+        const rawMessage =
+          typeof err === 'string'
+            ? err
+            : err && typeof err === 'object' && 'message' in err
+              ? String((err as { message: string }).message)
+              : ''
+
+        if (
+          rawMessage.includes('canceled') ||
+          rawMessage.includes('cancelled') ||
+          rawMessage.includes('1001')
+        ) {
+          return
+        }
+
+        throw new Error(
+          'No pudimos completar el inicio con Apple en el dispositivo. Intenta nuevamente.',
+        )
       }
     }
+
+    await signInWithOAuthPopupOrRedirect(appleProvider)
   }
 
   const logout = async () => {
@@ -472,6 +552,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     profile,
     profileLoading,
     loginWithGoogle,
+    loginWithApple,
     logout,
     saveProfile,
     deactivateAccount,

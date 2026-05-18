@@ -5,6 +5,7 @@ import {
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
+  OAuthProvider,
   initializeAuth,
   indexedDBLocalPersistence,
   browserLocalPersistence,
@@ -59,6 +60,10 @@ const auth =
     : getAuth(app)
 const googleProvider = new GoogleAuthProvider()
 
+const appleProvider = new OAuthProvider('apple.com')
+appleProvider.addScope('email')
+appleProvider.addScope('name')
+
 /** Una sola vez por carga de página; evita que Strict Mode consuma el resultado del redirect. */
 const redirectResultPromise = getRedirectResult(auth)
 
@@ -72,4 +77,13 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export { app, analytics, db, auth, googleProvider, redirectResultPromise, messaging }
+export {
+  app,
+  analytics,
+  db,
+  auth,
+  googleProvider,
+  appleProvider,
+  redirectResultPromise,
+  messaging,
+}

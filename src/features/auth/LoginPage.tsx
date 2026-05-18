@@ -8,6 +8,7 @@ import {
   IonModal,
 } from '@ionic/react'
 import {
+  arrowBackOutline,
   restaurantOutline,
   pizzaOutline,
   flameOutline,
@@ -15,10 +16,13 @@ import {
   nutritionOutline,
   wineOutline,
 } from 'ionicons/icons'
-import { type CSSProperties, useEffect, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { useHistory, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import logo from '../../assets/Logo.png'
 import { Capacitor } from '@capacitor/core'
+import { loginRedirectFromSearch } from '../../routes/paths'
+import { AppleIcon, GoogleIcon } from './components/LoginProviderIcons'
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms?: string[]
@@ -40,7 +44,13 @@ const BG_ICONS = [
 ]
 
 export default function LoginPage() {
-  const { loginWithGoogle, loading } = useAuth()
+  const { loginWithGoogle, loginWithApple, loading } = useAuth()
+  const history = useHistory()
+  const location = useLocation()
+  const backTo = useMemo(
+    () => loginRedirectFromSearch(location.search),
+    [location.search],
+  )
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +71,23 @@ export default function LoginPage() {
     }
   }
 
+  const handleAppleLogin = async () => {
+    setError(null)
+    setSubmitting(true)
+    try {
+      await loginWithApple()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos conectar con Apple. Intenta nuevamente.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const isBusy = loading || submitting
+
+  const handleBack = () => {
+    history.push(backTo)
+  }
 
   useEffect(() => {
     if (Capacitor.isNativePlatform() || typeof window === 'undefined') return
@@ -125,7 +151,19 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <div className="relative z-10 min-h-full flex items-center justify-center px-4 py-10">
+        <div className="relative z-10 min-h-full flex flex-col px-4 pb-10 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={isBusy}
+            className="mb-4 inline-flex items-center gap-1.5 self-start rounded-lg px-1 py-2 text-sm font-medium text-gray-300 transition-colors hover:text-white disabled:opacity-50"
+            aria-label="Volver"
+          >
+            <IonIcon icon={arrowBackOutline} className="text-lg" />
+            Volver
+          </button>
+
+          <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-md">
             <div className="rounded-3xl bg-white shadow-2xl overflow-hidden border border-white/10">
               {/* Cabecera de marca */}
@@ -146,7 +184,7 @@ export default function LoginPage() {
                 </p>
               </header>
 
-              {/* Botón Google */}
+              {/* Inicio de sesión */}
               <section className="px-6 py-6 sm:py-7 space-y-5">
                 {error && (
                   <div className="rounded-xl bg-red-50 px-3 py-2">
@@ -161,9 +199,24 @@ export default function LoginPage() {
                   fill="outline"
                   disabled={isBusy}
                   onClick={handleGoogleLogin}
-                  className="font-semibold rounded-2xl h-12 border-2 border-gray-300 text-gray-50 bg-(--krocam-black)"
+                  className="font-semibold rounded-2xl h-12 border-2 border-gray-300 text-gray-50 bg-(--krocam-black) [--padding-start:1rem] [--padding-end:1rem]"
                 >
+                  <span slot="start" className="mr-2.5 flex shrink-0 items-center">
+                    <GoogleIcon />
+                  </span>
                   Continuar con Google
+                </IonButton>
+
+                <IonButton
+                  expand="block"
+                  disabled={isBusy}
+                  onClick={handleAppleLogin}
+                  className="font-semibold rounded-2xl h-12 text-white bg-black [--background:black] [--background-activated:#1a1a1a] [--background-hover:#262626] [--padding-start:1rem] [--padding-end:1rem]"
+                >
+                  <span slot="start" className="mr-2.5 flex shrink-0 items-center text-white">
+                    <AppleIcon />
+                  </span>
+                  Continuar con Apple
                 </IonButton>
 
                 <p className="text-[11px] text-gray-500 leading-snug text-center">
@@ -192,7 +245,7 @@ export default function LoginPage() {
                       </p>
                       <p className="text-sm text-gray-300">
                         Recopilamos algunos datos básicos que tú mismo proporcionas al
-                        hacer un pedido (nombre de usuario de Google, teléfono, barrio,
+                        hacer un pedido (cuenta de Google o Apple, teléfono, barrio,
                         dirección y notas de entrega). Esta información se usa
                         únicamente para:
                       </p>
@@ -266,6 +319,7 @@ export default function LoginPage() {
                 </div>
               </div>
             )}
+          </div>
           </div>
         </div>
 

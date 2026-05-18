@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Redirect, useLocation } from 'react-router-dom'
 import { LoadingScreen } from '../../components/LoadingScreen'
 import { useAuth } from '../../context/AuthContext'
-import { ROUTES } from '../paths'
+import { loginRedirectFromSearch } from '../paths'
 
 interface GuestOnlyProps {
   children: ReactNode
@@ -11,12 +11,7 @@ interface GuestOnlyProps {
 export function GuestOnly({ children }: GuestOnlyProps) {
   const { user, loading } = useAuth()
   const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  const rawRedirect = params.get('redirect')
-  const redirectTo =
-    rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
-      ? rawRedirect
-      : ROUTES.HOME
+  const redirectTo = loginRedirectFromSearch(location.search)
 
   if (loading) {
     return <LoadingScreen />
