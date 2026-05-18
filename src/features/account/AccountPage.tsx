@@ -21,10 +21,13 @@ import {
 import { useEffect, useState } from 'react'
 import { useHistory } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { TabHomeButton } from '../../components/layout/TabHomeButton'
+import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { ROUTES } from '../../routes/paths'
 
 export default function AccountPage() {
   const history = useHistory()
+  const showBottomTabs = useShowBottomTabs()
   const { user, profile, profileLoading, saveProfile, logout, deactivateAccount } = useAuth()
 
   const [phone, setPhone] = useState('')
@@ -84,9 +87,15 @@ export default function AccountPage() {
     <IonPage>
       <IonHeader className="ion-no-border">
         <IonToolbar className="krocam-toolbar">
-          <IonButtons slot="start">
-            <IonBackButton defaultHref={ROUTES.HOME} text="Volver" color="light" />
-          </IonButtons>
+          {showBottomTabs ? (
+            <IonButtons slot="start">
+              <TabHomeButton />
+            </IonButtons>
+          ) : (
+            <IonButtons slot="start">
+              <IonBackButton defaultHref={ROUTES.HOME} text="Volver" color="light" />
+            </IonButtons>
+          )}
           <IonTitle className="krocam-font-title text-white">Mi cuenta</IonTitle>
         </IonToolbar>
       </IonHeader>

@@ -30,6 +30,8 @@ import {
 import { useEffect, useState } from 'react'
 import { useHistory } from 'react-router-dom'
 import { notificationsOutline } from 'ionicons/icons'
+import { TabHomeButton } from '../../components/layout/TabHomeButton'
+import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { ROUTES } from '../../routes/paths'
 import { getApiUrl } from '../../config/apiOrigin'
 import { auth, db } from '../../firebase'
@@ -131,6 +133,7 @@ export default function AdminPage({
   notificationsReturnPath = ROUTES.ADMIN_ORDERS,
 }: AdminPageProps) {
   const history = useHistory()
+  const showBottomTabs = useShowBottomTabs()
   const { user: authUser } = useAuth()
   const onClose = () => history.push(onClosePath)
   const onOpenNotifications = () => {
@@ -388,10 +391,13 @@ export default function AdminPage({
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
-        <IonToolbar className="krocam-toolbar flex items-center justify-between px-2">
-          <p className="krocam-font-title text-lg font-bold text-white shrink min-w-0">
-            Panel admin
-          </p>
+        <IonToolbar className="krocam-toolbar flex items-center justify-between gap-2 px-2">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {showBottomTabs && <TabHomeButton />}
+            <p className="krocam-font-title text-lg font-bold text-white truncate">
+              Panel admin
+            </p>
+          </div>
           <div className="flex items-center gap-1 shrink-0">
             {onOpenNotifications && (
               <IonButton
@@ -417,9 +423,11 @@ export default function AdminPage({
             >
               Reseñas
             </IonButton>
-            <IonButton fill="clear" color="light" onClick={onClose}>
-              Volver a la carta
-            </IonButton>
+            {!showBottomTabs && (
+              <IonButton fill="clear" color="light" onClick={onClose}>
+                Volver a la carta
+              </IonButton>
+            )}
           </div>
         </IonToolbar>
         <div className="px-4 pb-3 pt-1 bg-(--krocam-black)">

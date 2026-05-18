@@ -1,5 +1,5 @@
 import { IonApp } from '@ionic/react'
-import { BrowserRouter } from 'react-router-dom'
+import { IonReactRouter } from '@ionic/react-router'
 import { CartProvider } from './context/CartContext'
 import { AuthProvider } from './context/AuthContext'
 import { AppRoutes } from './routes/AppRoutes'
@@ -7,13 +7,13 @@ import { AppRoutes } from './routes/AppRoutes'
 function App() {
   return (
     <IonApp>
-      <BrowserRouter>
+      <IonReactRouter>
         <AuthProvider>
           <CartProvider>
             <AppRoutes />
           </CartProvider>
         </AuthProvider>
-      </BrowserRouter>
+      </IonReactRouter>
     </IonApp>
   )
 }

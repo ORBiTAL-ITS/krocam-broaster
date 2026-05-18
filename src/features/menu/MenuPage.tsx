@@ -11,8 +11,6 @@ import {
   IonIcon,
   IonPage,
   IonSpinner,
-  IonTabBar,
-  IonTabButton,
   IonToast,
 } from '@ionic/react'
 import { useEffect, useState } from 'react'
@@ -29,12 +27,8 @@ import {
   cartOutline,
   fastFoodOutline,
   flameOutline,
-  listOutline,
-  logInOutline,
-  personOutline,
   pizzaOutline,
   restaurantOutline,
-  settingsOutline,
 } from 'ionicons/icons'
 import { MenuHeader } from './components/MenuHeader'
 import { CartModal } from './components/CartModal'
@@ -47,6 +41,7 @@ import { getWhatsappNumber } from '../../services/appConfig'
 import { notifyAdminsNewOrder } from '../../services/notifyNewOrderPush'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { Capacitor } from '@capacitor/core'
+import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { WebPushActivationBanner } from '../../components/WebPushActivationBanner'
 import { MenuEditPanel } from './edit/MenuEditPanel'
 import { ReviewsSection } from '../../components/reviews/ReviewsSection'
@@ -121,12 +116,7 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
   const inboxUnread = useInboxUnreadCount(user?.uid)
 
   const isNative = Capacitor.isNativePlatform()
-  const isSmallWeb =
-    !isNative && typeof window !== 'undefined' && window.innerWidth < 768
-  const showBottomTabs = isNative || isSmallWeb
-  const bottomTabsClassName = isNative
-    ? 'krocam-bottom-tabs md:hidden'
-    : 'krocam-bottom-tabs krocam-bottom-tabs-web md:hidden'
+  const showBottomTabs = useShowBottomTabs()
 
   const handleAddToCart = (combo: ComboItem) => {
     if (!currentSection) return
@@ -455,7 +445,13 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
           vertical="bottom"
           horizontal="start"
           slot="fixed"
-          className={`ml-2 mb-4 ${!Capacitor.isNativePlatform() ? 'cart-fab-web' : ''}`}
+          className={[
+            'ml-2 mb-4',
+            showBottomTabs && isNative && 'cart-fab-native-tabs',
+            showBottomTabs && !isNative && 'cart-fab-web',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <div className="cart-fab-wrapper">
             <IonFabButton onClick={() => setIsCartOpen(true)}>
@@ -478,36 +474,6 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
           onDidDismiss={() => setIsToastOpen(false)}
         />
       </IonContent>
-      {showBottomTabs && (
-        <IonTabBar slot="bottom" className={bottomTabsClassName}>
-          {user ? (
-            <>
-              <IonTabButton tab="orders" onClick={() => history.push(ROUTES.ORDERS)}>
-                <IonIcon icon={listOutline} />
-                <span className="krocam-bottom-tab-label">Mis pedidos</span>
-              </IonTabButton>
-              {canAccessOrdersAdmin && (
-                <IonTabButton tab="admin" onClick={() => history.push(ROUTES.ADMIN_ORDERS)}>
-                  <IonIcon icon={settingsOutline} />
-                  <span className="krocam-bottom-tab-label">Panel admin</span>
-                </IonTabButton>
-              )}
-              <IonTabButton tab="account" onClick={() => history.push(ROUTES.ACCOUNT)}>
-                <IonIcon icon={personOutline} />
-                <span className="krocam-bottom-tab-label">Mi cuenta</span>
-              </IonTabButton>
-            </>
-          ) : (
-            <IonTabButton
-              tab="login"
-              onClick={() => history.push(loginPath(ROUTES.HOME))}
-            >
-              <IonIcon icon={logInOutline} />
-              <span className="krocam-bottom-tab-label">Iniciar sesión</span>
-            </IonTabButton>
-          )}
-        </IonTabBar>
-      )}
     </IonPage>
   )
 }

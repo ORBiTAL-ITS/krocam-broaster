@@ -19,6 +19,8 @@ import {
 } from 'ionicons/icons'
 import { useEffect, useState } from 'react'
 import { useHistory } from 'react-router-dom'
+import { TabHomeButton } from '../../components/layout/TabHomeButton'
+import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { ROUTES } from '../../routes/paths'
 import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -88,6 +90,7 @@ interface MyOrdersPageProps {
 export default function MyOrdersPage({ onClosePath = ROUTES.HOME }: MyOrdersPageProps) {
   const history = useHistory()
   const onClose = () => history.push(onClosePath)
+  const showBottomTabs = useShowBottomTabs()
   const { user } = useAuth()
   const [orders, setOrders] = useState<OrderDoc[]>([])
   const [loading, setLoading] = useState(true)
@@ -147,13 +150,18 @@ export default function MyOrdersPage({ onClosePath = ROUTES.HOME }: MyOrdersPage
   return (
     <IonPage>
       <IonHeader className="ion-no-border">
-        <IonToolbar className="krocam-toolbar flex items-center justify-between px-4">
-          <p className="krocam-font-title text-lg font-bold text-white">
-            Mis pedidos
-          </p>
-          <IonButton fill="clear" color="light" onClick={onClose}>
-            Volver a la carta
-          </IonButton>
+        <IonToolbar className="krocam-toolbar flex items-center justify-between gap-2 px-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {showBottomTabs && <TabHomeButton />}
+            <p className="krocam-font-title text-lg font-bold text-white truncate">
+              Mis pedidos
+            </p>
+          </div>
+          {!showBottomTabs && (
+            <IonButton fill="clear" color="light" onClick={onClose}>
+              Volver a la carta
+            </IonButton>
+          )}
         </IonToolbar>
       </IonHeader>
       <IonContent className="ion-padding carta-content">
