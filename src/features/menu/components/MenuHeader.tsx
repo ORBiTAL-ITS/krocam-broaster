@@ -16,6 +16,8 @@ interface MenuHeaderProps {
   onOpenAdmin?: () => void
   onOpenMyOrders?: () => void
   onOpenNotifications?: () => void
+  /** Invitados web: ir a iniciar sesión */
+  onOpenLogin?: () => void
   inboxUnreadCount?: number
 }
 
@@ -28,6 +30,7 @@ export function MenuHeader({
   onOpenAdmin,
   onOpenMyOrders,
   onOpenNotifications,
+  onOpenLogin,
   inboxUnreadCount = 0,
 }: MenuHeaderProps) {
   return (
@@ -50,6 +53,16 @@ export function MenuHeader({
             </div>
           </div>
           <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+            {onOpenLogin && (
+              <IonButton
+                fill="outline"
+                color="light"
+                className="md:hidden min-h-[40px] text-xs font-semibold border-white/40"
+                onClick={onOpenLogin}
+              >
+                Entrar
+              </IonButton>
+            )}
             {onOpenNotifications && (
               <IonButton
                 fill="clear"
@@ -72,6 +85,17 @@ export function MenuHeader({
               </IonButton>
             )}
             <div className="hidden md:flex items-center gap-2">
+              {onOpenLogin && (
+                <IonButton
+                  size="small"
+                  fill="solid"
+                  color="warning"
+                  className="text-xs rounded-full font-semibold"
+                  onClick={onOpenLogin}
+                >
+                  Iniciar sesión
+                </IonButton>
+              )}
               {onOpenMyOrders && (
                 <IonButton
                   size="small"

@@ -8,25 +8,24 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
-  IonModal,
   IonPage,
   IonTabBar,
   IonTabButton,
   IonToast,
 } from '@ionic/react'
 import { useState } from 'react'
+import { Link, useHistory } from 'react-router-dom'
 import { CartaMenu, type ComboItem } from '../../components/CartaMenu'
-
-import alasImg from '../../assets/WhatsApp Image 2026-03-05 at 11.23.32.png'
-import pernilContramusloImg from '../../assets/WhatsApp Image 2026-03-05 at 11.23.32 (1).png'
-import hamburguesaImg from '../../assets/WhatsApp Image 2026-03-05 at 11.23.31.png'
-import chicharronImg from '../../assets/WhatsApp Image 2026-03-05 at 11.23.31 (1).png'
+import { LandingSections } from '../marketing/LandingSections'
+import { SiteFooter } from '../../components/layout/SiteFooter'
+import { MENU_SECTIONS } from '../../data/menuSections'
 import { useCart, type CartItem } from '../../context/CartContext'
 import {
   cartOutline,
   fastFoodOutline,
   flameOutline,
   listOutline,
+  logInOutline,
   logOutOutline,
   pizzaOutline,
   restaurantOutline,
@@ -48,192 +47,7 @@ import { WebPushActivationBanner } from '../../components/WebPushActivationBanne
 /** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
 const OPEN_WHATSAPP_AFTER_ORDER = false
 
-const SECCIONES: Array<{
-  id: string
-  title: string
-  heroImageSrc: string
-  heroImageAlt: string
-  combos: ComboItem[]
-}> = [
-  {
-    id: 'alas',
-    title: 'Alas',
-    heroImageSrc: alasImg,
-    heroImageAlt: 'Alitas broaster KROCAM',
-    combos: [
-      {
-        id: 1,
-        title: 'Combo #1',
-        price: '14.000',
-        description:
-          '2 Presas + papas a la francesa + gaseosa personal + salsa de la casa',
-        featured: true,
-      },
-      {
-        id: 2,
-        title: 'Combo #2',
-        price: '26.000',
-        description:
-          '4 Presas + papas a la francesa + 2 gaseosas personales + salsa de la casa',
-      },
-      {
-        id: 3,
-        title: 'Combo #3',
-        price: '38.000',
-        description:
-          '6 Presas + papas a la francesa + 3 gaseosas personales + salsa de la casa',
-      },
-      {
-        id: 4,
-        title: 'Combo #4',
-        price: '48.000',
-        description:
-          '8 Presas + papas a la francesa + 4 gaseosas personales + salsa de la casa',
-      },
-    ] as ComboItem[],
-  },
-  {
-    id: 'pernil',
-    title: 'Pernil',
-    heroImageSrc: pernilContramusloImg,
-    heroImageAlt: 'Perniles de pollo broaster KROCAM',
-    combos: [
-      {
-        id: 1,
-        title: 'Combo #1',
-        price: '14.000',
-        description:
-          '2 Presas + papas a la francesa + gaseosa personal + salsa de la casa',
-      },
-      {
-        id: 2,
-        title: 'Combo #2',
-        price: '26.000',
-        description:
-          '4 Presas + papas a la francesa + 2 gaseosas personales + salsa de la casa',
-        featured: true,
-      },
-      {
-        id: 3,
-        title: 'Combo #3',
-        price: '38.000',
-        description:
-          '6 Presas + papas a la francesa + 3 gaseosas personales + salsa de la casa',
-      },
-      {
-        id: 4,
-        title: 'Combo #4',
-        price: '48.000',
-        description:
-          '8 Presas + papas a la francesa + 4 gaseosas personales + salsa de la casa',
-      },
-    ] as ComboItem[],
-  },
-  {
-    id: 'contramuslo',
-    title: 'Contra muslo',
-    heroImageSrc: pernilContramusloImg,
-    heroImageAlt: 'Piezas contra muslo KROCAM',
-    combos: [
-      {
-        id: 1,
-        title: 'Combo #1',
-        price: '14.000',
-        description:
-          '2 Presas + papas a la francesa + gaseosa personal + salsa de la casa',
-      },
-      {
-        id: 2,
-        title: 'Combo #2',
-        price: '26.000',
-        description:
-          '4 Presas + papas a la francesa + 2 gaseosas personales + salsa de la casa',
-      },
-      {
-        id: 3,
-        title: 'Combo #3',
-        price: '38.000',
-        description:
-          '6 Presas + papas a la francesa + 3 gaseosas personales + salsa de la casa',
-        featured: true,
-      },
-      {
-        id: 4,
-        title: 'Combo #4',
-        price: '48.000',
-        description:
-          '8 Presas + papas a la francesa + 4 gaseosas personales + salsa de la casa',
-      },
-    ] as ComboItem[],
-  },
-  {
-    id: 'hamburguesa',
-    title: 'Hamburguesa',
-    heroImageSrc: hamburguesaImg,
-    heroImageAlt: 'Hamburguesa de pollo crocante KROCAM',
-    combos: [
-      {
-        id: 1,
-        title: 'Combo #1',
-        price: '26.000',
-        description:
-          '1 Hamburguesa + papas a la francesa + 1 gaseosa personal + salsa de la casa',
-        featured: true,
-      },
-      {
-        id: 2,
-        title: 'Combo #2',
-        price: '33.000',
-        description:
-          '1 Hamburguesa + 1 presa + papas a la francesa + 2 gaseosas personales + salsa de la casa',
-      },
-      {
-        id: 3,
-        title: 'Combo #3',
-        price: '48.000',
-        description:
-          '1 Hamburguesa + 2 presas y chicharrón de pollo + papas a la francesa + 2 gaseosas personales + salsa de la casa',
-      },
-    ] as ComboItem[],
-  },
-  {
-    id: 'chicharron',
-    title: 'Chicharrón de pollo',
-    heroImageSrc: chicharronImg,
-    heroImageAlt: 'Chicharrón de pollo KROCAM',
-    combos: [
-      {
-        id: 1,
-        title: 'Combo #1',
-        price: '15.000',
-        description:
-          'Trozos de pechuga + papas + gaseosa + salsa',
-        featured: true,
-      },
-      {
-        id: 2,
-        title: 'Combo #2',
-        price: '28.000',
-        description:
-          'Trozos de pechuga + papas + 2 gaseosas + salsa',
-      },
-      {
-        id: 3,
-        title: 'Combo #3',
-        price: '40.000',
-        description:
-          'Trozos de pechuga + papas + 3 gaseosas + salsa',
-      },
-      {
-        id: 4,
-        title: 'Combo #4',
-        price: '50.000',
-        description:
-          'Trozos de pechuga + papas + 4 gaseosas + salsa',
-      },
-    ] as ComboItem[],
-  },
-]
+const SECCIONES = MENU_SECTIONS
 
 export interface MenuPageProps {
   onOpenAdmin?: () => void
@@ -246,12 +60,12 @@ export default function MenuPage({
   onOpenMyOrders,
   onOpenNotifications,
 }: MenuPageProps = {}) {
+  const history = useHistory()
   const [seccionActual, setSeccionActual] = useState(0)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isToastOpen, setIsToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
-  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false)
 
   const {
     title,
@@ -313,7 +127,40 @@ export default function MenuPage({
       return
     }
 
+    if (!user) {
+      history.push('/login?redirect=/')
+      setIsCartOpen(false)
+      setToastMessage('Inicia sesión para confirmar tu pedido.')
+      setIsToastOpen(true)
+      return
+    }
+
     setIsCheckoutOpen(true)
+  }
+
+  const scrollToMenu = () => {
+    document
+      .getElementById('krocam-menu-anchor')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const handleFeaturedAdd = (sectionIndex: number, combo: ComboItem) => {
+    setSeccionActual(sectionIndex)
+    const sectionTitle = SECCIONES[sectionIndex].title
+    const name = `${combo.title} (${sectionTitle})`
+    const id = `${sectionIndex}-${combo.id}`
+    const numericPrice =
+      Number(combo.price.replace(/\./g, '').replace(',', '.')) || 0
+
+    addItem({
+      id,
+      name,
+      section: sectionTitle,
+      unitPrice: numericPrice,
+    })
+
+    setToastMessage(`${name} se añadió al carrito`)
+    setIsToastOpen(true)
   }
 
   const handleFinishOrder = async (deliveryData: CheckoutDeliveryData) => {
@@ -454,15 +301,16 @@ export default function MenuPage({
           title: seccionTitle,
         }))}
         getSectionIcon={getSectionIcon}
-        onLogout={logout}
+        onLogout={user ? logout : undefined}
+        onOpenLogin={!user ? () => history.push('/login?redirect=/') : undefined}
         onOpenAdmin={onOpenAdmin}
         onOpenMyOrders={onOpenMyOrders}
         onOpenNotifications={onOpenNotifications}
         inboxUnreadCount={inboxUnread}
       />
       <IonContent className="ion-padding carta-content">
-        <div className="max-w-5xl mx-auto py-6">
-          <WebPushActivationBanner />
+        <div id="krocam-menu-anchor" className="max-w-5xl mx-auto py-6 scroll-mt-4">
+          {user && <WebPushActivationBanner />}
           <CartaMenu
             sectionTitle={title}
             combos={combos}
@@ -474,74 +322,29 @@ export default function MenuPage({
 
         {!Capacitor.isNativePlatform() && (
           <>
-            <div className="mt-4 text-center text-xs text-gray-400">
+            <LandingSections
+              sections={SECCIONES}
+              onExploreMenu={scrollToMenu}
+              onAddFeaturedCombo={handleFeaturedAdd}
+            />
+            <div className="max-w-5xl mx-auto mt-4 text-center text-xs text-gray-400 px-2">
               Al continuar, aceptas nuestra{' '}
-              <button
-                type="button"
-                className="underline text-gray-300 hover:text-gray-100"
-                onClick={() => setIsPrivacyOpen(true)}
+              <Link
+                to="/privacy-policy"
+                className="underline text-gray-600 hover:text-gray-900 transition-colors"
               >
                 política de privacidad
-              </button>
+              </Link>{' '}
+              y los{' '}
+              <Link
+                to="/terms"
+                className="underline text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                términos de uso
+              </Link>
               .
             </div>
-
-            <IonModal
-              isOpen={isPrivacyOpen}
-              onDidDismiss={() => setIsPrivacyOpen(false)}
-            >
-              <div className="h-full w-full overflow-y-auto bg-black text-gray-100 px-4 py-6">
-                <div className="max-w-2xl mx-auto space-y-4">
-                  <h1 className="text-xl font-bold text-yellow-400">
-                    Política de privacidad — KROCAM BROASTER SAMIR
-                  </h1>
-                  <p className="text-sm text-gray-300">
-                    Esta carta digital está pensada exclusivamente para que puedas
-                    ver el menú y realizar tus pedidos de forma rápida y cómoda.
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    Recopilamos algunos datos básicos que tú mismo proporcionas al
-                    hacer un pedido (nombre de usuario de Google, teléfono, barrio,
-                    dirección y notas de entrega). Esta información se usa
-                    únicamente para:
-                  </p>
-                  <ul className="list-disc pl-5 text-sm text-gray-300 space-y-1">
-                    <li>Identificar tu pedido y poder contactarte.</li>
-                    <li>Entregar correctamente tu domicilio.</li>
-                    <li>Registrar el historial de pedidos en nuestro sistema.</li>
-                  </ul>
-                  <p className="text-sm text-gray-300">
-                    Los datos se almacenan en servicios de Google Firebase (Auth,
-                    Firestore y mensajería push) y, cuando confirmas tu pedido, se
-                    utiliza WhatsApp para que puedas enviar tu orden directamente
-                    al negocio. No vendemos ni compartimos tu información personal
-                    con terceros ajenos al servicio, más allá de los proveedores
-                    tecnológicos necesarios para operar la aplicación.
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    Puedes solicitar la eliminación de tus datos de contacto y de
-                    tus pedidos escribiendo directamente al número de WhatsApp que
-                    aparece en la carta. Ten en cuenta que, por requisitos
-                    legales, ciertos registros pueden conservarse por un tiempo
-                    limitado.
-                  </p>
-                  <p className="text-sm text-gray-400">
-                    Esta política aplica únicamente al uso de la carta web y puede
-                    actualizarse ocasionalmente para reflejar mejoras en el
-                    servicio.
-                  </p>
-                  <div className="pt-2 text-center">
-                    <button
-                      type="button"
-                      className="px-4 py-2 rounded-md bg-yellow-500 text-black text-sm font-semibold"
-                      onClick={() => setIsPrivacyOpen(false)}
-                    >
-                      Cerrar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </IonModal>
+            <SiteFooter />
           </>
         )}
 
@@ -600,20 +403,32 @@ export default function MenuPage({
       </IonContent>
       {showBottomTabs && (
         <IonTabBar slot="bottom" className={bottomTabsClassName}>
-          <IonTabButton tab="orders" onClick={onOpenMyOrders}>
-            <IonIcon icon={listOutline} />
-            <span className="krocam-bottom-tab-label">Mis pedidos</span>
-          </IonTabButton>
-          {onOpenAdmin && (
-            <IonTabButton tab="admin" onClick={onOpenAdmin}>
-              <IonIcon icon={settingsOutline} />
-              <span className="krocam-bottom-tab-label">Panel admin</span>
+          {user ? (
+            <>
+              <IonTabButton tab="orders" onClick={onOpenMyOrders}>
+                <IonIcon icon={listOutline} />
+                <span className="krocam-bottom-tab-label">Mis pedidos</span>
+              </IonTabButton>
+              {onOpenAdmin && (
+                <IonTabButton tab="admin" onClick={onOpenAdmin}>
+                  <IonIcon icon={settingsOutline} />
+                  <span className="krocam-bottom-tab-label">Panel admin</span>
+                </IonTabButton>
+              )}
+              <IonTabButton tab="logout" onClick={() => logout()}>
+                <IonIcon icon={logOutOutline} />
+                <span className="krocam-bottom-tab-label">Cerrar sesión</span>
+              </IonTabButton>
+            </>
+          ) : (
+            <IonTabButton
+              tab="login"
+              onClick={() => history.push('/login?redirect=/')}
+            >
+              <IonIcon icon={logInOutline} />
+              <span className="krocam-bottom-tab-label">Iniciar sesión</span>
             </IonTabButton>
           )}
-          <IonTabButton tab="logout" onClick={logout}>
-            <IonIcon icon={logOutOutline} />
-            <span className="krocam-bottom-tab-label">Cerrar sesión</span>
-          </IonTabButton>
         </IonTabBar>
       )}
     </IonPage>
