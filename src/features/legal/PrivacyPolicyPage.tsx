@@ -28,9 +28,11 @@ export default function PrivacyPolicyPage() {
         aplicación.
       </p>
       <p className="text-sm text-gray-600 leading-relaxed">
-        Puedes solicitar la eliminación de tus datos de contacto y de tus pedidos escribiendo
-        directamente al número de WhatsApp que aparece en la carta. Ten en cuenta que, por
-        requisitos legales, ciertos registros pueden conservarse por un tiempo limitado.
+        Puedes <strong>desactivar tu cuenta</strong> en cualquier momento desde la sección
+        «Mi cuenta» (inicia sesión y abre el menú de usuario). Tu perfil quedará inactivo y
+        cerraremos la sesión; si vuelves a iniciar sesión con la misma cuenta de Google, tu
+        cuenta se reactivará automáticamente. También puedes escribir al WhatsApp del negocio.
+        Por requisitos legales, el historial de pedidos puede conservarse un tiempo limitado.
       </p>
       <p className="text-sm text-gray-500">
         Esta política aplica únicamente al uso de la carta web y puede actualizarse ocasionalmente

@@ -4,7 +4,14 @@
  */
 
 import { IonButton, IonHeader, IonIcon, IonToolbar } from '@ionic/react'
-import { listOutline, logOutOutline, notificationsOutline, settingsOutline } from 'ionicons/icons'
+import {
+  createOutline,
+  listOutline,
+  logOutOutline,
+  notificationsOutline,
+  personOutline,
+  settingsOutline,
+} from 'ionicons/icons'
 import logo from '../../../assets/Logo.png'
 
 interface MenuHeaderProps {
@@ -14,7 +21,12 @@ interface MenuHeaderProps {
   getSectionIcon: (id: string) => string
   onLogout?: () => void
   onOpenAdmin?: () => void
+  onOpenMenuEdit?: () => void
+  editMode?: boolean
+  hideCategoryTabs?: boolean
+  onExitEdit?: () => void
   onOpenMyOrders?: () => void
+  onOpenAccount?: () => void
   onOpenNotifications?: () => void
   /** Invitados web: ir a iniciar sesión */
   onOpenLogin?: () => void
@@ -28,7 +40,12 @@ export function MenuHeader({
   getSectionIcon,
   onLogout,
   onOpenAdmin,
+  onOpenMenuEdit,
+  editMode,
+  hideCategoryTabs,
+  onExitEdit,
   onOpenMyOrders,
+  onOpenAccount,
   onOpenNotifications,
   onOpenLogin,
   inboxUnreadCount = 0,
@@ -108,17 +125,55 @@ export function MenuHeader({
                   Mis pedidos
                 </IonButton>
               )}
-              {onOpenAdmin && (
+              {onOpenAccount && (
                 <IonButton
                   size="small"
                   fill="outline"
                   color="light"
                   className="text-xs rounded-full border-white/30"
-                  onClick={onOpenAdmin}
+                  onClick={onOpenAccount}
                 >
-                  <IonIcon icon={settingsOutline} className="mr-1" />
-                  Panel admin
+                  <IonIcon icon={personOutline} className="mr-1" />
+                  Mi cuenta
                 </IonButton>
+              )}
+              {editMode && onExitEdit ? (
+                <IonButton
+                  size="small"
+                  fill="solid"
+                  color="warning"
+                  className="text-xs rounded-full font-semibold"
+                  onClick={onExitEdit}
+                >
+                  Listo
+                </IonButton>
+              ) : (
+                <>
+                  {onOpenMenuEdit && (
+                    <IonButton
+                      size="small"
+                      fill="outline"
+                      color="light"
+                      className="text-xs rounded-full border-white/30"
+                      onClick={onOpenMenuEdit}
+                    >
+                      <IonIcon icon={createOutline} className="mr-1" />
+                      Editar menú
+                    </IonButton>
+                  )}
+                  {onOpenAdmin && (
+                    <IonButton
+                      size="small"
+                      fill="outline"
+                      color="light"
+                      className="text-xs rounded-full border-white/30"
+                      onClick={onOpenAdmin}
+                    >
+                      <IonIcon icon={settingsOutline} className="mr-1" />
+                      Panel admin
+                    </IonButton>
+                  )}
+                </>
               )}
               {onLogout && (
                 <IonButton
@@ -136,6 +191,7 @@ export function MenuHeader({
           </div>
         </div>
       </IonToolbar>
+      {!hideCategoryTabs && (
       <div className="px-4 pb-3 pt-1 bg-(--krocam-black)">
         <p className="text-gray-400 text-xs font-medium mb-2 uppercase tracking-wider">
           Categorías
@@ -158,6 +214,7 @@ export function MenuHeader({
           ))}
         </div>
       </div>
+      )}
     </IonHeader>
   )
 }

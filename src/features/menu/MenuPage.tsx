@@ -4,21 +4,26 @@
  */
 
 import {
+  IonButton,
   IonContent,
   IonFab,
   IonFabButton,
   IonIcon,
   IonPage,
+  IonSpinner,
   IonTabBar,
   IonTabButton,
   IonToast,
 } from '@ionic/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useHistory } from 'react-router-dom'
+import { ROUTES, loginPath } from '../../routes/paths'
+import { usePermissions } from '../../hooks/usePermissions'
 import { CartaMenu, type ComboItem } from '../../components/CartaMenu'
 import { LandingSections } from '../marketing/LandingSections'
 import { SiteFooter } from '../../components/layout/SiteFooter'
-import { MENU_SECTIONS } from '../../data/menuSections'
+import { useMenu, formatPriceCop } from '../../hooks/useMenu'
+import { migrateMenuSeed } from '../../services/migrateMenuSeed'
 import { useCart, type CartItem } from '../../context/CartContext'
 import {
   cartOutline,
@@ -26,7 +31,7 @@ import {
   flameOutline,
   listOutline,
   logInOutline,
-  logOutOutline,
+  personOutline,
   pizzaOutline,
   restaurantOutline,
   settingsOutline,
@@ -43,36 +48,47 @@ import { notifyAdminsNewOrder } from '../../services/notifyNewOrderPush'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { Capacitor } from '@capacitor/core'
 import { WebPushActivationBanner } from '../../components/WebPushActivationBanner'
+import { MenuEditPanel } from './edit/MenuEditPanel'
+import { ReviewsSection } from '../../components/reviews/ReviewsSection'
 
 /** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
 const OPEN_WHATSAPP_AFTER_ORDER = false
 
-const SECCIONES = MENU_SECTIONS
-
 export interface MenuPageProps {
-  onOpenAdmin?: () => void
-  onOpenMyOrders?: () => void
-  onOpenNotifications?: () => void
+  editMode?: boolean
 }
 
-export default function MenuPage({
-  onOpenAdmin,
-  onOpenMyOrders,
-  onOpenNotifications,
-}: MenuPageProps = {}) {
+export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
   const history = useHistory()
+  const { isAdmin, canAccessOrdersAdmin } = usePermissions()
+  const { sections, getHeroSrc, loading: menuLoading, source: menuSource } = useMenu(editMode)
   const [seccionActual, setSeccionActual] = useState(0)
+  const [seedMessage, setSeedMessage] = useState<string | null>(null)
+  const [seeding, setSeeding] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
   const [isToastOpen, setIsToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
 
-  const {
-    title,
-    combos,
-    heroImageSrc,
-    heroImageAlt,
-  } = SECCIONES[seccionActual]
+  useEffect(() => {
+    if (seccionActual >= sections.length && sections.length > 0) {
+      setSeccionActual(0)
+    }
+  }, [sections.length, seccionActual])
+
+  const currentSection = sections[seccionActual]
+  const title = currentSection?.title ?? ''
+  const heroImageAlt = currentSection?.heroImageAlt ?? ''
+  const heroImageSrc = currentSection ? getHeroSrc(currentSection) : ''
+  const combos: ComboItem[] =
+    currentSection?.combos
+      .filter((c) => c.active)
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        price: formatPriceCop(c.priceCop),
+      })) ?? []
   const {
     items,
     totalItems,
@@ -81,7 +97,26 @@ export default function MenuPage({
     removeOne,
     removeAllOfItem,
     clear,
+    pruneInvalidItems,
   } = useCart()
+
+  useEffect(() => {
+    const validIds = new Set<string>()
+    for (const sec of sections) {
+      for (const c of sec.combos) {
+        if (c.active) validIds.add(`${sec.id}-${c.id}`)
+      }
+    }
+    pruneInvalidItems(validIds, (removed) => {
+      if (removed.length > 0) {
+        setToastMessage(
+          `Algunos productos ya no están disponibles y se quitaron del carrito: ${removed.join(', ')}`,
+        )
+        setIsToastOpen(true)
+      }
+    })
+  }, [sections, pruneInvalidItems])
+
   const { user, logout, saveProfile } = useAuth()
   const inboxUnread = useInboxUnreadCount(user?.uid)
 
@@ -94,11 +129,12 @@ export default function MenuPage({
     : 'krocam-bottom-tabs krocam-bottom-tabs-web md:hidden'
 
   const handleAddToCart = (combo: ComboItem) => {
+    if (!currentSection) return
     const section = title
     const name = `${combo.title} (${section})`
-    const id = `${seccionActual}-${combo.id}`
-    const numericPrice =
-      Number(combo.price.replace(/\./g, '').replace(',', '.')) || 0
+    const id = `${currentSection.id}-${combo.id}`
+    const menuCombo = currentSection.combos.find((c) => c.id === combo.id)
+    const numericPrice = menuCombo?.priceCop ?? 0
 
     addItem({
       id,
@@ -128,7 +164,7 @@ export default function MenuPage({
     }
 
     if (!user) {
-      history.push('/login?redirect=/')
+      history.push(loginPath(ROUTES.HOME))
       setIsCartOpen(false)
       setToastMessage('Inicia sesión para confirmar tu pedido.')
       setIsToastOpen(true)
@@ -142,25 +178,6 @@ export default function MenuPage({
     document
       .getElementById('krocam-menu-anchor')
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  const handleFeaturedAdd = (sectionIndex: number, combo: ComboItem) => {
-    setSeccionActual(sectionIndex)
-    const sectionTitle = SECCIONES[sectionIndex].title
-    const name = `${combo.title} (${sectionTitle})`
-    const id = `${sectionIndex}-${combo.id}`
-    const numericPrice =
-      Number(combo.price.replace(/\./g, '').replace(',', '.')) || 0
-
-    addItem({
-      id,
-      name,
-      section: sectionTitle,
-      unitPrice: numericPrice,
-    })
-
-    setToastMessage(`${name} se añadió al carrito`)
-    setIsToastOpen(true)
   }
 
   const handleFinishOrder = async (deliveryData: CheckoutDeliveryData) => {
@@ -263,7 +280,7 @@ export default function MenuPage({
         : 'Tu pedido fue registrado. Te avisaremos por la app cuando haya novedades.',
     )
     setIsToastOpen(true)
-    setTimeout(() => onOpenMyOrders?.(), 1200)
+    setTimeout(() => history.push(ROUTES.ORDERS), 1200)
   }
 
   const handleAddExistingItem = (item: CartItem) => {
@@ -296,21 +313,76 @@ export default function MenuPage({
       <MenuHeader
         seccionActual={seccionActual}
         onChangeSeccion={setSeccionActual}
-        secciones={SECCIONES.map(({ id, title: seccionTitle }) => ({
+        secciones={sections.map(({ id, title: seccionTitle }) => ({
           id,
           title: seccionTitle,
         }))}
         getSectionIcon={getSectionIcon}
         onLogout={user ? logout : undefined}
-        onOpenLogin={!user ? () => history.push('/login?redirect=/') : undefined}
-        onOpenAdmin={onOpenAdmin}
-        onOpenMyOrders={onOpenMyOrders}
-        onOpenNotifications={onOpenNotifications}
+        onOpenLogin={!user ? () => history.push(loginPath(ROUTES.HOME)) : undefined}
+        onOpenAdmin={
+          canAccessOrdersAdmin ? () => history.push(ROUTES.ADMIN_ORDERS) : undefined
+        }
+        onOpenMenuEdit={isAdmin ? () => history.push(ROUTES.MENU_EDIT) : undefined}
+        editMode={editMode}
+        hideCategoryTabs={editMode}
+        onExitEdit={editMode ? () => history.push(ROUTES.HOME) : undefined}
+        onOpenMyOrders={user ? () => history.push(ROUTES.ORDERS) : undefined}
+        onOpenAccount={user ? () => history.push(ROUTES.ACCOUNT) : undefined}
+        onOpenNotifications={
+          user ? () => history.push(ROUTES.NOTIFICATIONS) : undefined
+        }
         inboxUnreadCount={inboxUnread}
       />
       <IonContent className="ion-padding carta-content">
         <div id="krocam-menu-anchor" className="max-w-5xl mx-auto py-6 scroll-mt-4">
+          {editMode && menuSource !== 'firestore' && (
+            <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="mb-2">Primera vez: sube el menú actual a Firebase.</p>
+              <IonButton
+                size="small"
+                disabled={seeding}
+                onClick={async () => {
+                  setSeeding(true)
+                  setSeedMessage(null)
+                  try {
+                    const res = await migrateMenuSeed()
+                    setSeedMessage(res.message)
+                  } catch (e) {
+                    setSeedMessage(
+                      e instanceof Error ? e.message : 'Error al migrar el menú.',
+                    )
+                  } finally {
+                    setSeeding(false)
+                  }
+                }}
+              >
+                {seeding ? 'Migrando…' : 'Migrar menú inicial a Firebase'}
+              </IonButton>
+              {seedMessage && <p className="text-xs mt-2">{seedMessage}</p>}
+            </div>
+          )}
+          {editMode && !menuLoading && (
+            <MenuEditPanel
+              sections={sections}
+              seccionActual={seccionActual}
+              onChangeSeccion={setSeccionActual}
+              onToast={(msg) => {
+                setToastMessage(msg)
+                setIsToastOpen(true)
+              }}
+            />
+          )}
+          {menuLoading && (
+            <div className="flex justify-center py-12">
+              <IonSpinner name="crescent" />
+            </div>
+          )}
+          {!menuLoading && sections.length === 0 && (
+            <p className="text-center text-gray-500 py-8">No hay categorías en el menú.</p>
+          )}
           {user && <WebPushActivationBanner />}
+          {!menuLoading && currentSection && (
           <CartaMenu
             sectionTitle={title}
             combos={combos}
@@ -318,15 +390,20 @@ export default function MenuPage({
             heroImageAlt={heroImageAlt}
             onAddCombo={handleAddToCart}
           />
+          )}
         </div>
+
+        {!editMode && !menuLoading && (
+          <ReviewsSection
+            sections={sections}
+            currentSection={currentSection ?? null}
+            className="mt-2"
+          />
+        )}
 
         {!Capacitor.isNativePlatform() && (
           <>
-            <LandingSections
-              sections={SECCIONES}
-              onExploreMenu={scrollToMenu}
-              onAddFeaturedCombo={handleFeaturedAdd}
-            />
+            <LandingSections onExploreMenu={scrollToMenu} />
             <div className="max-w-5xl mx-auto mt-4 text-center text-xs text-gray-400 px-2">
               Al continuar, aceptas nuestra{' '}
               <Link
@@ -405,25 +482,25 @@ export default function MenuPage({
         <IonTabBar slot="bottom" className={bottomTabsClassName}>
           {user ? (
             <>
-              <IonTabButton tab="orders" onClick={onOpenMyOrders}>
+              <IonTabButton tab="orders" onClick={() => history.push(ROUTES.ORDERS)}>
                 <IonIcon icon={listOutline} />
                 <span className="krocam-bottom-tab-label">Mis pedidos</span>
               </IonTabButton>
-              {onOpenAdmin && (
-                <IonTabButton tab="admin" onClick={onOpenAdmin}>
+              {canAccessOrdersAdmin && (
+                <IonTabButton tab="admin" onClick={() => history.push(ROUTES.ADMIN_ORDERS)}>
                   <IonIcon icon={settingsOutline} />
                   <span className="krocam-bottom-tab-label">Panel admin</span>
                 </IonTabButton>
               )}
-              <IonTabButton tab="logout" onClick={() => logout()}>
-                <IonIcon icon={logOutOutline} />
-                <span className="krocam-bottom-tab-label">Cerrar sesión</span>
+              <IonTabButton tab="account" onClick={() => history.push(ROUTES.ACCOUNT)}>
+                <IonIcon icon={personOutline} />
+                <span className="krocam-bottom-tab-label">Mi cuenta</span>
               </IonTabButton>
             </>
           ) : (
             <IonTabButton
               tab="login"
-              onClick={() => history.push('/login?redirect=/')}
+              onClick={() => history.push(loginPath(ROUTES.HOME))}
             >
               <IonIcon icon={logInOutline} />
               <span className="krocam-bottom-tab-label">Iniciar sesión</span>

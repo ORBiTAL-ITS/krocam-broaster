@@ -18,6 +18,8 @@ import {
   timeOutline,
 } from 'ionicons/icons'
 import { useEffect, useState } from 'react'
+import { useHistory } from 'react-router-dom'
+import { ROUTES } from '../../routes/paths'
 import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
@@ -80,10 +82,12 @@ interface OrderDoc {
 }
 
 interface MyOrdersPageProps {
-  onClose: () => void
+  onClosePath?: string
 }
 
-export default function MyOrdersPage({ onClose }: MyOrdersPageProps) {
+export default function MyOrdersPage({ onClosePath = ROUTES.HOME }: MyOrdersPageProps) {
+  const history = useHistory()
+  const onClose = () => history.push(onClosePath)
   const { user } = useAuth()
   const [orders, setOrders] = useState<OrderDoc[]>([])
   const [loading, setLoading] = useState(true)

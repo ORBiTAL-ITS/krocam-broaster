@@ -1,23 +1,69 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    function isSignedIn() {
+      return request.auth != null;
     }
-    match /users/{userId}/inbox/{notifId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow create, delete: if false;
-    }
-    match /orders/{orderId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null
-        && (resource.data.userId == request.auth.uid
-            || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-                && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
-      allow update: if request.auth != null
+
+    function isAdmin() {
+      return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/inbox/{notifId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow create, delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+    }
+
+    match /menuCategories/{categoryId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+
+      match /combos/{comboId} {
+        allow read: if true;
+        allow create, update, delete: if isAdmin();
+      }
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if resource.data.status == 'approved' || isAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.text.size() >= 10
+        && request.resource.data.text.size() <= 500;
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && resource.data.userId == request.auth.uid
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.status == 'pending');
+      allow delete: if false;
+    }
+
+    match /config/{docId} {
+      allow read: if docId == 'whatsapp' || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /meta/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }

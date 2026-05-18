@@ -22,6 +22,8 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { useHistory, useLocation } from 'react-router-dom'
+import { ROUTES } from '../../routes/paths'
 import type { Timestamp } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useAuth } from '../../context/AuthContext'
@@ -37,11 +39,14 @@ export interface InboxDoc {
   createdAt: Timestamp | null
 }
 
-interface NotificationsPageProps {
-  onClose: () => void
-}
-
-export default function NotificationsPage({ onClose }: NotificationsPageProps) {
+export default function NotificationsPage() {
+  const history = useHistory()
+  const location = useLocation<{ returnTo?: string }>()
+  const returnTo =
+    location.state?.returnTo && location.state.returnTo.startsWith('/')
+      ? location.state.returnTo
+      : ROUTES.HOME
+  const onClose = () => history.push(returnTo)
   const { user } = useAuth()
   const [items, setItems] = useState<InboxDoc[]>([])
   const [loading, setLoading] = useState(true)

@@ -16,6 +16,10 @@ import {
   signOut,
 } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import {
+  deactivateUserAccount,
+  reactivateUserAccount,
+} from '../services/accountService'
 import { Capacitor } from '@capacitor/core'
 import { SocialLogin } from '@capgo/capacitor-social-login'
 import { auth, db, googleProvider, redirectResultPromise } from '../firebase'
@@ -33,6 +37,7 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>
   logout: () => Promise<void>
   saveProfile: (data: UserProfileInput) => Promise<void>
+  deactivateAccount: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -48,8 +53,11 @@ export interface UserProfile {
   notes?: string
   /** Solo se asigna desde Firebase (consola); la app nunca escribe este campo. */
   role?: 'admin' | 'customer'
+  /** false = cuenta desactivada por el usuario; al volver a iniciar sesión se reactiva. */
+  active?: boolean
   createdAt?: Date
   updatedAt?: Date
+  deactivatedAt?: Date
 }
 
 export interface UserProfileInput {
@@ -155,6 +163,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const snap = await getDoc(ref)
         if (snap.exists()) {
           const data = snap.data()
+          if (data.active === false) {
+            await reactivateUserAccount(firebaseUser.uid)
+          }
           const rawRole =
             typeof data.role === 'string' ? data.role.trim().toLowerCase() : ''
           const storedAdminUid = getStoredAdminUid()
@@ -172,8 +183,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
             address: data.address ?? '',
             notes: data.notes ?? '',
             role: effectiveRole,
+            active: true,
             createdAt: data.createdAt?.toDate?.() ?? undefined,
             updatedAt: data.updatedAt?.toDate?.() ?? undefined,
+            deactivatedAt: data.deactivatedAt?.toDate?.() ?? undefined,
           })
         } else {
           const storedAdminUid = getStoredAdminUid()
@@ -184,6 +197,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
               address: '',
               notes: '',
               role: 'admin',
+              active: true,
               createdAt: undefined,
               updatedAt: undefined,
             })
@@ -200,6 +214,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             address: '',
             notes: '',
             role: 'admin',
+            active: true,
             createdAt: undefined,
             updatedAt: undefined,
           })
@@ -393,6 +408,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       barrio: String(data.barrio).trim(),
       address: String(data.address).trim(),
       notes: data.notes ? String(data.notes).trim() : '',
+      active: true,
       updatedAt: serverTimestamp(),
     }
     if (!existing.exists()) {
@@ -422,9 +438,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
       address: data.address,
       notes: data.notes ?? '',
       role: prev?.role,
+      active: true,
       createdAt: prev?.createdAt,
       updatedAt: new Date(),
+      deactivatedAt: prev?.deactivatedAt,
     }))
+  }
+
+  const deactivateAccount = async () => {
+    if (!user) {
+      throw new Error('No hay usuario autenticado.')
+    }
+    if (profile?.role === 'admin') {
+      throw new Error(
+        'Las cuentas de administrador no se pueden desactivar desde la app. Contacta soporte técnico.',
+      )
+    }
+    await deactivateUserAccount(user.uid)
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(`krocam_profile_form_${user.uid}`)
+      }
+    } catch {
+      // ignorar
+    }
+    setStoredAdminUid(null)
+    await signOut(auth)
   }
 
   const value: AuthContextValue = {
@@ -435,6 +474,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loginWithGoogle,
     logout,
     saveProfile,
+    deactivateAccount,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

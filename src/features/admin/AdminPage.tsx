@@ -28,7 +28,9 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { useHistory } from 'react-router-dom'
 import { notificationsOutline } from 'ionicons/icons'
+import { ROUTES } from '../../routes/paths'
 import { getApiUrl } from '../../config/apiOrigin'
 import { auth, db } from '../../firebase'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
@@ -98,8 +100,8 @@ interface OrderDoc {
 }
 
 interface AdminPageProps {
-  onClose: () => void
-  onOpenNotifications?: () => void
+  onClosePath?: string
+  notificationsReturnPath?: string
 }
 
 type AdminTab = 'pedidos' | 'resumen' | 'historial' | 'notificaciones'
@@ -124,8 +126,16 @@ function broadcastErrorMessage(err: unknown): string {
   return 'No se pudo enviar la notificación.'
 }
 
-export default function AdminPage({ onClose, onOpenNotifications }: AdminPageProps) {
+export default function AdminPage({
+  onClosePath = ROUTES.HOME,
+  notificationsReturnPath = ROUTES.ADMIN_ORDERS,
+}: AdminPageProps) {
+  const history = useHistory()
   const { user: authUser } = useAuth()
+  const onClose = () => history.push(onClosePath)
+  const onOpenNotifications = () => {
+    history.push(ROUTES.NOTIFICATIONS, { returnTo: notificationsReturnPath })
+  }
   const inboxUnread = useInboxUnreadCount(authUser?.uid)
   const [tab, setTab] = useState<AdminTab>('pedidos')
   const [orders, setOrders] = useState<OrderDoc[]>([])
@@ -400,6 +410,13 @@ export default function AdminPage({ onClose, onOpenNotifications }: AdminPagePro
                 </span>
               </IonButton>
             )}
+            <IonButton
+              fill="clear"
+              color="light"
+              onClick={() => history.push(ROUTES.ADMIN_REVIEWS)}
+            >
+              Reseñas
+            </IonButton>
             <IonButton fill="clear" color="light" onClick={onClose}>
               Volver a la carta
             </IonButton>

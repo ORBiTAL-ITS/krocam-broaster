@@ -1,5 +1,6 @@
 /**
- * Bloques de landing para web (hero, beneficios, destacados, reseñas, FAQ).
+ * Bloques de landing para web (hero, beneficios, FAQ).
+ * Las reseñas reales están en ReviewsSection (debajo del menú).
  */
 
 import { IonButton, IonIcon } from '@ionic/react'
@@ -7,49 +8,8 @@ import {
   checkmarkCircleOutline,
   rocketOutline,
   shieldCheckmarkOutline,
-  star,
   timeOutline,
 } from 'ionicons/icons'
-import type { ComboItem } from '../../components/CartaMenu/types'
-import { ComboCard } from '../../components/ComboCard'
-import type { MenuSection } from '../../data/menuSections'
-
-function StarRating({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="flex items-center gap-0.5" role="img" aria-label={label}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <IonIcon
-          key={i}
-          icon={star}
-          className={
-            i <= value ? 'text-(--krocam-yellow) text-lg' : 'text-gray-300 text-lg'
-          }
-        />
-      ))}
-    </div>
-  )
-}
-
-const REVIEWS = [
-  {
-    id: '1',
-    author: 'Laura M.',
-    rating: 5,
-    text: 'Llegó caliente y el pollo súper crocante. Repito seguro.',
-  },
-  {
-    id: '2',
-    author: 'Diego R.',
-    rating: 5,
-    text: 'Pedí desde la carta en segundos. El domicilio fue puntual.',
-  },
-  {
-    id: '3',
-    author: 'Paola V.',
-    rating: 4,
-    text: 'Buenas porciones y buen sabor. Ideal para compartir en casa.',
-  },
-]
 
 const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   {
@@ -64,27 +24,17 @@ const FAQ_ITEMS: Array<{ q: string; a: string }> = [
     q: '¿Cómo se confirma el pedido?',
     a: 'Agrega productos al carrito y, al confirmar, completa tus datos de entrega. El equipo coordinará contigo.',
   },
+  {
+    q: '¿Puedo dejar una reseña?',
+    a: 'Sí. Inicia sesión y usa el botón «Deja tu reseña» en la carta. Publicamos tu comentario tras revisarlo.',
+  },
 ]
 
 export interface LandingSectionsProps {
-  sections: MenuSection[]
   onExploreMenu: () => void
-  onAddFeaturedCombo: (sectionIndex: number, combo: ComboItem) => void
 }
 
-export function LandingSections({
-  sections,
-  onExploreMenu,
-  onAddFeaturedCombo,
-}: LandingSectionsProps) {
-  const featured = sections
-    .flatMap((sec, sectionIndex) =>
-      sec.combos
-        .filter((c) => c.featured)
-        .map((combo) => ({ sectionIndex, sec, combo })),
-    )
-    .slice(0, 6)
-
+export function LandingSections({ onExploreMenu }: LandingSectionsProps) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-gray-200/80 bg-linear-to-b from-(--krocam-black) via-gray-900 to-gray-950 text-white mb-10 shadow-xl">
       <div
@@ -103,8 +53,7 @@ export function LandingSections({
           </span>
         </h2>
         <p className="text-sm sm:text-base text-gray-300 max-w-xl mx-auto leading-relaxed mb-8">
-          Arriba eliges la categoría y los combos; aquí te mostramos lo más pedido y más info del
-          servicio. Sin salón — solo sabor y servicio ágil.
+          Elige la categoría y los combos en la carta. Sin salón — solo sabor y servicio ágil.
         </p>
         <div className="flex justify-center">
           <IonButton
@@ -147,65 +96,7 @@ export function LandingSections({
         </div>
       </section>
 
-      <section className="relative px-5 pb-12 md:px-10">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-            <div>
-              <h3 className="krocam-font-title text-xl font-bold text-white">
-                Combos destacados
-              </h3>
-              <p className="text-sm text-gray-400 mt-1">
-                Los más pedidos — también disponibles en la carta completa.
-              </p>
-            </div>
-            <IonButton
-              fill="clear"
-              size="small"
-              className="text-(--krocam-yellow) font-semibold self-start md:self-auto"
-              onClick={onExploreMenu}
-            >
-              Ir al menú completo
-            </IonButton>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {featured.map(({ sectionIndex, sec, combo }) => (
-              <div key={`${sec.id}-${combo.id}`}>
-                <ComboCard
-                  title={`${combo.title} · ${sec.title}`}
-                  description={combo.description}
-                  price={combo.price}
-                  isFeatured
-                  onAdd={() => onAddFeaturedCombo(sectionIndex, combo)}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="relative border-t border-white/10 bg-black/40 px-5 py-12 md:px-10">
-        <div className="max-w-5xl mx-auto">
-          <h3 className="krocam-font-title text-xl font-bold text-white text-center mb-8">
-            Lo que dicen nuestros clientes
-          </h3>
-          <div className="grid md:grid-cols-3 gap-5">
-            {REVIEWS.map((r) => (
-              <blockquote
-                key={r.id}
-                className="rounded-2xl border border-white/10 bg-white/5 p-5 text-left transition-transform duration-200 hover:-translate-y-0.5"
-              >
-                <StarRating value={r.rating} label={`${r.rating} estrellas`} />
-                <p className="text-sm text-gray-200 mt-3 leading-relaxed">&ldquo;{r.text}&rdquo;</p>
-                <footer className="mt-4 text-xs font-semibold text-(--krocam-yellow)">
-                  — {r.author}
-                </footer>
-              </blockquote>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="relative px-5 py-12 md:px-10 pb-16">
+      <section className="relative border-t border-white/10 px-5 py-12 md:px-10 pb-16">
         <div className="max-w-3xl mx-auto">
           <h3 className="krocam-font-title text-xl font-bold text-white text-center mb-6">
             Preguntas frecuentes

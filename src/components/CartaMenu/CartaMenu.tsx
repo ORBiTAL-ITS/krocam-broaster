@@ -62,7 +62,7 @@ export function CartaMenu({
             description={combo.description}
             price={combo.price}
             onAdd={() => onAddCombo(combo)}
-            isFeatured={combo.featured}
+            isFeatured={false}
           />
         ))}
       </div>

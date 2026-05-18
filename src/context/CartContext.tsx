@@ -21,6 +21,8 @@ interface CartContextValue {
   removeOne: (id: string) => void
   removeAllOfItem: (id: string) => void
   clear: () => void
+  /** Quita ítems cuyo id no está en el conjunto válido (combos desactivados). */
+  pruneInvalidItems: (validIds: Set<string>, onRemoved?: (names: string[]) => void) => void
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined)
@@ -59,6 +61,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clear = () => setItems([])
 
+  const pruneInvalidItems = (validIds: Set<string>, onRemoved?: (names: string[]) => void) => {
+    setItems((prev) => {
+      const removed = prev.filter((i) => !validIds.has(i.id)).map((i) => i.name)
+      const next = prev.filter((i) => validIds.has(i.id))
+      if (removed.length > 0) {
+        setTimeout(() => onRemoved?.(removed), 0)
+      }
+      return next
+    })
+  }
+
   const value = useMemo<CartContextValue>(() => {
     const totalItems = items.reduce((acc, item) => acc + item.quantity, 0)
     const totalPrice = items.reduce(
@@ -74,6 +87,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeOne,
       removeAllOfItem,
       clear,
+      pruneInvalidItems,
     }
   }, [items])
 

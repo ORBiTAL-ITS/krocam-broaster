@@ -3,19 +3,26 @@
  * Compartido entre menú, landing y destacados.
  */
 
-import type { ComboItem } from '../components/CartaMenu/types'
-
 import alasImg from '../assets/WhatsApp Image 2026-03-05 at 11.23.32.png'
 import pernilContramusloImg from '../assets/WhatsApp Image 2026-03-05 at 11.23.32 (1).png'
 import hamburguesaImg from '../assets/WhatsApp Image 2026-03-05 at 11.23.31.png'
 import chicharronImg from '../assets/WhatsApp Image 2026-03-05 at 11.23.31 (1).png'
+
+/** Combo del catálogo estático (fallback local). */
+export interface StaticComboItem {
+  id: number
+  title: string
+  price: string
+  description: string
+  featured?: boolean
+}
 
 export interface MenuSection {
   id: string
   title: string
   heroImageSrc: string
   heroImageAlt: string
-  combos: ComboItem[]
+  combos: StaticComboItem[]
 }
 
 export const MENU_SECTIONS: MenuSection[] = [
