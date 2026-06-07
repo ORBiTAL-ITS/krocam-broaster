@@ -161,6 +161,7 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
       return
     }
 
+    setIsCartOpen(false)
     setIsCheckoutOpen(true)
   }
 
@@ -431,7 +432,10 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
 
         <CheckoutModal
           isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
+          onClose={() => {
+            setIsCheckoutOpen(false)
+            if (items.length > 0) setIsCartOpen(true)
+          }}
           totalPrice={totalPrice}
           formatCurrency={formatCurrency}
           onFinishOrder={handleFinishOrder}

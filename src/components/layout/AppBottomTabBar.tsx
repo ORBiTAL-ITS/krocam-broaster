@@ -19,14 +19,14 @@ import { ROUTES } from '../../routes/paths'
  * Cerrar sesión vive en Mi cuenta.
  */
 export function AppBottomTabBar() {
-  const { user, loading: authLoading } = useAuth()
-  const { isAdmin, canAccessOrdersAdmin } = usePermissions()
+  const { user } = useAuth()
+  const { isAdmin, canAccessOrdersAdmin, loading } = usePermissions()
   const isNative = Capacitor.isNativePlatform()
   const className = isNative
     ? 'krocam-bottom-tabs'
     : 'krocam-bottom-tabs krocam-bottom-tabs-web'
 
-  if (authLoading) {
+  if (loading) {
     return null
   }
 

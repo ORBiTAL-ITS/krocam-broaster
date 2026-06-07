@@ -1,6 +1,6 @@
 /**
  * CheckoutModal: modal de datos de entrega y mapa de ubicación.
- * Precarga datos del perfil en Firebase; el usuario puede cambiarlos solo para este pedido (no se actualiza el perfil).
+ * Precarga datos guardados (local + Firebase) y sincroniza con Mi cuenta al escribir.
  * Incluye teléfono, dirección y coords del mapa en el payload al confirmar.
  */
 
@@ -9,41 +9,14 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
   IonModal,
   IonToolbar,
 } from '@ionic/react'
 import { Geolocation } from '@capacitor/geolocation'
 import { Capacitor } from '@capacitor/core'
 import { closeOutline } from 'ionicons/icons'
-import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../../../context/AuthContext'
-
-const profileStorageKey = (uid: string) => `krocam_profile_form_${uid}`
-
-function readStoredProfile(uid: string): {
-  phone?: string
-  barrio?: string
-  address?: string
-  notes?: string
-} {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = localStorage.getItem(profileStorageKey(uid))
-    if (!raw) return {}
-    return JSON.parse(raw) as {
-      phone?: string
-      barrio?: string
-      address?: string
-      notes?: string
-    }
-  } catch {
-    return {}
-  }
-}
+import { useEffect, useState } from 'react'
+import { useDeliveryProfileForm } from '../../../hooks/useDeliveryProfileForm'
 
 export interface CheckoutDeliveryData {
   phone: string
@@ -68,13 +41,17 @@ export function CheckoutModal({
   formatCurrency,
   onFinishOrder,
 }: CheckoutModalProps) {
-  const { profile, profileLoading, user } = useAuth()
-  const checkoutWasOpenRef = useRef(false)
+  const {
+    phone: deliveryPhone,
+    barrio: deliveryBarrio,
+    address: deliveryAddress,
+    notes: deliveryNotes,
+    setPhone: setDeliveryPhone,
+    setBarrio: setDeliveryBarrio,
+    setAddress: setDeliveryAddress,
+    setNotes: setDeliveryNotes,
+  } = useDeliveryProfileForm({ active: isOpen })
 
-  const [deliveryPhone, setDeliveryPhone] = useState('')
-  const [deliveryBarrio, setDeliveryBarrio] = useState('')
-  const [deliveryAddress, setDeliveryAddress] = useState('')
-  const [deliveryNotes, setDeliveryNotes] = useState('')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
   )
@@ -84,46 +61,9 @@ export function CheckoutModal({
 
   useEffect(() => {
     if (isOpen) return
-    checkoutWasOpenRef.current = false
     setCoords(null)
     setLocationError(null)
   }, [isOpen])
-
-  /**
-   * - Al abrir: cargar teléfono/dirección desde Firebase y, si faltan, desde localStorage.
-   * - Mientras el modal sigue abierto: si el perfil llega tarde o se refresca, solo rellenar
-   *   campos vacíos para no borrar lo que el usuario ya escribió.
-   */
-  useEffect(() => {
-    if (!isOpen || !user?.uid) return
-
-    const stored = readStoredProfile(user.uid)
-    const p = profile
-    const merged = {
-      phone: p?.phone?.trim() || stored.phone?.trim() || '',
-      barrio: p?.barrio?.trim() || stored.barrio?.trim() || '',
-      address: p?.address?.trim() || stored.address?.trim() || '',
-      notes: p?.notes?.trim() || stored.notes?.trim() || '',
-    }
-
-    const justOpened = !checkoutWasOpenRef.current
-    checkoutWasOpenRef.current = true
-
-    if (justOpened) {
-      setDeliveryPhone(merged.phone)
-      setDeliveryBarrio(merged.barrio)
-      setDeliveryAddress(merged.address)
-      setDeliveryNotes(merged.notes)
-      return
-    }
-
-    if (profileLoading) return
-
-    setDeliveryPhone(prev => prev.trim() || merged.phone)
-    setDeliveryBarrio(prev => prev.trim() || merged.barrio)
-    setDeliveryAddress(prev => prev.trim() || merged.address)
-    setDeliveryNotes(prev => prev.trim() || merged.notes)
-  }, [isOpen, user?.uid, profile, profileLoading])
 
   const handleUseCurrentLocation = async () => {
     const isNative = Capacitor.isNativePlatform()
@@ -228,8 +168,11 @@ export function CheckoutModal({
     }
   }
 
+  const inputClassName =
+    'mt-1 w-full bg-transparent text-base text-gray-900 outline-none placeholder:text-gray-400'
+
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose}>
+    <IonModal isOpen={isOpen} onDidDismiss={onClose} keepContentsMounted>
       <IonHeader className="ion-no-border">
         <IonToolbar className="krocam-toolbar flex items-center justify-between px-4">
           <div className="py-2">
@@ -247,49 +190,58 @@ export function CheckoutModal({
       </IonHeader>
       <IonContent className="ion-padding carta-content">
         <div className="space-y-4 max-w-3xl mx-auto">
-          <IonList lines="full">
-            <IonItem>
-              <IonLabel position="stacked">
+          <div className="rounded-2xl bg-white border border-gray-200 overflow-hidden divide-y divide-gray-100">
+            <label className="block px-4 py-3">
+              <span className="text-xs font-medium text-gray-500">
                 Teléfono de contacto
-              </IonLabel>
-              <IonInput
+              </span>
+              <input
                 type="tel"
+                inputMode="tel"
+                autoComplete="tel"
                 value={deliveryPhone}
                 placeholder="Ej: 300 123 4567"
-                onIonChange={(e) => setDeliveryPhone(e.detail.value ?? '')}
+                onChange={(e) => setDeliveryPhone(e.target.value)}
+                className={inputClassName}
               />
-            </IonItem>
-            <IonItem>
-              <IonLabel position="stacked">
-                Barrio
-              </IonLabel>
-              <IonInput
+            </label>
+            <label className="block px-4 py-3">
+              <span className="text-xs font-medium text-gray-500">Barrio</span>
+              <input
+                type="text"
+                autoComplete="address-level3"
                 value={deliveryBarrio}
                 placeholder="Ej: La Floresta, El Poblado..."
-                onIonChange={(e) => setDeliveryBarrio(e.detail.value ?? '')}
+                onChange={(e) => setDeliveryBarrio(e.target.value)}
+                className={inputClassName}
               />
-            </IonItem>
-            <IonItem>
-              <IonLabel position="stacked">
+            </label>
+            <label className="block px-4 py-3">
+              <span className="text-xs font-medium text-gray-500">
                 Dirección exacta
-              </IonLabel>
-              <IonInput
+              </span>
+              <input
+                type="text"
+                autoComplete="street-address"
                 value={deliveryAddress}
                 placeholder="Ej: Calle 10 # 12-34, apto 301"
-                onIonChange={(e) => setDeliveryAddress(e.detail.value ?? '')}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                className={inputClassName}
               />
-            </IonItem>
-            <IonItem>
-              <IonLabel position="stacked">
+            </label>
+            <label className="block px-4 py-3">
+              <span className="text-xs font-medium text-gray-500">
                 Referencias para llegar (opcional)
-              </IonLabel>
-              <IonInput
+              </span>
+              <input
+                type="text"
                 value={deliveryNotes}
                 placeholder="Color de la casa, puntos de referencia, etc."
-                onIonChange={(e) => setDeliveryNotes(e.detail.value ?? '')}
+                onChange={(e) => setDeliveryNotes(e.target.value)}
+                className={inputClassName}
               />
-            </IonItem>
-          </IonList>
+            </label>
+          </div>
 
           <div className="mt-2 space-y-3">
             <p className="text-xs text-gray-500">

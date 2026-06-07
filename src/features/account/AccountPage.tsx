@@ -17,10 +17,12 @@ import {
   IonText,
   IonTitle,
   IonToolbar,
+  useIonViewWillEnter,
 } from '@ionic/react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useHistory } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useDeliveryProfileForm } from '../../hooks/useDeliveryProfileForm'
 import { TabHomeButton } from '../../components/layout/TabHomeButton'
 import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { ROUTES } from '../../routes/paths'
@@ -29,25 +31,28 @@ export default function AccountPage() {
   const history = useHistory()
   const showBottomTabs = useShowBottomTabs()
   const { user, profile, profileLoading, saveProfile, logout, deleteAccount } = useAuth()
+  const {
+    phone,
+    barrio,
+    address,
+    notes,
+    setPhone,
+    setBarrio,
+    setAddress,
+    setNotes,
+    refreshFromStorage,
+  } = useDeliveryProfileForm()
 
-  const [phone, setPhone] = useState('')
-  const [barrio, setBarrio] = useState('')
-  const [address, setAddress] = useState('')
-  const [notes, setNotes] = useState('')
+  useIonViewWillEnter(() => {
+    refreshFromStorage()
+  })
+
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showDeletedAlert, setShowDeletedAlert] = useState(false)
-
-  useEffect(() => {
-    if (profileLoading || !profile) return
-    setPhone(profile.phone ?? '')
-    setBarrio(profile.barrio ?? '')
-    setAddress(profile.address ?? '')
-    setNotes(profile.notes ?? '')
-  }, [profileLoading, profile])
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault()

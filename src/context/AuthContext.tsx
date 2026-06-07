@@ -32,6 +32,10 @@ import {
   subscribeWebForegroundPush,
   webPushRequiresUserGesture,
 } from '../services/pushNotifications'
+import {
+  deliveryProfileStorageKey,
+  writeStoredDeliveryProfile,
+} from '../services/deliveryProfileStorage'
 
 interface AuthContextValue {
   user: User | null
@@ -85,6 +89,18 @@ const FIREBASE_AUTH_DOMAIN = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as
 
 const ADMIN_UID_STORAGE_KEY = 'krocam:adminUid'
 
+interface FirestoreUserDoc {
+  active?: boolean
+  role?: string
+  phone?: string
+  barrio?: string
+  address?: string
+  notes?: string
+  createdAt?: { toDate?: () => Date }
+  updatedAt?: { toDate?: () => Date }
+  deactivatedAt?: { toDate?: () => Date }
+}
+
 function getStoredAdminUid(): string | null {
   if (typeof window === 'undefined') return null
   try {
@@ -108,12 +124,54 @@ function setStoredAdminUid(uid: string | null) {
   }
 }
 
+function normalizeFirestoreRole(role: unknown): string {
+  return typeof role === 'string' ? role.trim().toLowerCase() : ''
+}
+
+/** Admin si Firestore, memoria o caché local coinciden con este uid. */
+function resolveAdminRole(
+  uid: string,
+  firestoreRole: unknown,
+  memoryRole?: 'admin' | 'customer',
+): 'admin' | undefined {
+  const storedAdminUid = getStoredAdminUid()
+  const isAdmin =
+    normalizeFirestoreRole(firestoreRole) === 'admin' ||
+    memoryRole === 'admin' ||
+    storedAdminUid === uid
+
+  if (isAdmin) {
+    setStoredAdminUid(uid)
+    return 'admin'
+  }
+  return undefined
+}
+
+async function fetchUserProfileDoc(
+  ref: ReturnType<typeof doc>,
+  attempts = 3,
+): Promise<Awaited<ReturnType<typeof getDoc>>> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
+    }
+    try {
+      return await getDoc(ref)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const mountedRef = useRef(true)
+  const profileRef = useRef<UserProfile | null>(null)
 
   // Inicialización SocialLogin (Google y Apple) en entornos nativos.
   useEffect(() => {
@@ -174,36 +232,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const applyUser = async (firebaseUser: User | null) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
-        setStoredAdminUid(null)
+        // No borrar krocam:adminUid aquí: Firebase a veces emite null al refrescar el
+        // token en iOS/Android y eso hacía perder el rol admin hasta el próximo login.
+        profileRef.current = null
         setProfile(null)
         setProfileLoading(false)
         setLoading(false)
         return
       }
       setProfileLoading(true)
+      const memoryRole = profileRef.current?.role
       try {
         const ref = doc(db, 'users', firebaseUser.uid)
-        const snap = await getDoc(ref)
+        const snap = await fetchUserProfileDoc(ref)
         if (snap.exists()) {
-          const data = snap.data()
+          const data = snap.data() as FirestoreUserDoc
           if (data.active === false) {
+            profileRef.current = null
             setProfile(null)
             setProfileLoading(false)
             setLoading(false)
             return
           }
-          const rawRole =
-            typeof data.role === 'string' ? data.role.trim().toLowerCase() : ''
-          const storedAdminUid = getStoredAdminUid()
-          const isAdminByStorage = storedAdminUid === firebaseUser.uid
-          const effectiveRole =
-            rawRole === 'admin' || isAdminByStorage ? 'admin' : undefined
+          const effectiveRole = resolveAdminRole(
+            firebaseUser.uid,
+            data.role,
+            memoryRole,
+          )
 
-          if (effectiveRole === 'admin' && storedAdminUid !== firebaseUser.uid) {
-            setStoredAdminUid(firebaseUser.uid)
-          }
-
-          setProfile({
+          const nextProfile: UserProfile = {
             phone: data.phone ?? '',
             barrio: data.barrio ?? '',
             address: data.address ?? '',
@@ -213,11 +270,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
             createdAt: data.createdAt?.toDate?.() ?? undefined,
             updatedAt: data.updatedAt?.toDate?.() ?? undefined,
             deactivatedAt: data.deactivatedAt?.toDate?.() ?? undefined,
-          })
+          }
+          profileRef.current = nextProfile
+          setProfile(nextProfile)
         } else {
-          const storedAdminUid = getStoredAdminUid()
-          if (storedAdminUid === firebaseUser.uid) {
-            setProfile({
+          const effectiveRole = resolveAdminRole(
+            firebaseUser.uid,
+            undefined,
+            memoryRole,
+          )
+          if (effectiveRole === 'admin') {
+            const nextProfile: UserProfile = {
               phone: '',
               barrio: '',
               address: '',
@@ -226,25 +289,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
               active: true,
               createdAt: undefined,
               updatedAt: undefined,
-            })
+            }
+            profileRef.current = nextProfile
+            setProfile(nextProfile)
           } else {
+            profileRef.current = null
             setProfile(null)
           }
         }
       } catch {
-        const storedAdminUid = getStoredAdminUid()
-        if (storedAdminUid === firebaseUser.uid) {
-          setProfile({
-            phone: '',
-            barrio: '',
-            address: '',
-            notes: '',
+        const effectiveRole = resolveAdminRole(
+          firebaseUser.uid,
+          undefined,
+          memoryRole,
+        )
+        if (effectiveRole === 'admin') {
+          const nextProfile: UserProfile = {
+            phone: profileRef.current?.phone ?? '',
+            barrio: profileRef.current?.barrio ?? '',
+            address: profileRef.current?.address ?? '',
+            notes: profileRef.current?.notes ?? '',
             role: 'admin',
             active: true,
-            createdAt: undefined,
-            updatedAt: undefined,
-          })
+            createdAt: profileRef.current?.createdAt,
+            updatedAt: profileRef.current?.updatedAt,
+          }
+          profileRef.current = nextProfile
+          setProfile(nextProfile)
         } else {
+          profileRef.current = null
           setProfile(null)
         }
       } finally {
@@ -283,18 +356,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  // Salvavidas: si por algún motivo Firebase/Auth nunca responde (por ejemplo,
-  // entorno nativo con WebView limitada), no queremos dejar la app en "cargando"
-  // para siempre. Pasados unos segundos mostramos la pantalla de login igual.
+  // Salvavidas: no bloquear la UI si Auth tarda (WebView nativa). El perfil tiene
+  // su propio tiempo de espera para no marcar "no admin" antes de leer Firestore.
   useEffect(() => {
-    if (!loading && !profileLoading) return
-    const timeoutMs = 8000
-    const timeoutId = setTimeout(() => {
-      setLoading(false)
-      setProfileLoading(false)
-    }, timeoutMs)
+    if (!loading) return
+    const timeoutId = setTimeout(() => setLoading(false), 8000)
     return () => clearTimeout(timeoutId)
-  }, [loading, profileLoading])
+  }, [loading])
+
+  useEffect(() => {
+    if (!profileLoading || !user) return
+    const timeoutId = setTimeout(() => setProfileLoading(false), 15000)
+    return () => clearTimeout(timeoutId)
+  }, [profileLoading, user])
 
   useEffect(() => {
     if (!user?.uid) return
@@ -473,6 +547,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = async () => {
     setStoredAdminUid(null)
+    profileRef.current = null
     await signOut(auth)
   }
 
@@ -496,33 +571,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     await setDoc(ref, payload, { merge: true })
 
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(
-          `krocam_profile_form_${user.uid}`,
-          JSON.stringify({
-            phone: payload.phone,
-            barrio: payload.barrio,
-            address: payload.address,
-            notes: payload.notes,
-          }),
-        )
-      }
-    } catch {
-      // Storage no disponible (p. ej. modo privado)
-    }
+    writeStoredDeliveryProfile(user.uid, {
+      phone: String(payload.phone),
+      barrio: String(payload.barrio),
+      address: String(payload.address),
+      notes: String(payload.notes),
+    })
 
-    setProfile(prev => ({
+    const existingRole = existing.exists() ? existing.data().role : undefined
+    const effectiveRole = resolveAdminRole(
+      user.uid,
+      existingRole,
+      profileRef.current?.role ?? profile?.role,
+    )
+
+    const nextProfile: UserProfile = {
       phone: data.phone,
       barrio: data.barrio,
       address: data.address,
       notes: data.notes ?? '',
-      role: prev?.role,
+      role: effectiveRole,
       active: true,
-      createdAt: prev?.createdAt,
+      createdAt: profileRef.current?.createdAt ?? profile?.createdAt,
       updatedAt: new Date(),
-      deactivatedAt: prev?.deactivatedAt,
-    }))
+      deactivatedAt: profileRef.current?.deactivatedAt ?? profile?.deactivatedAt,
+    }
+    profileRef.current = nextProfile
+    setProfile(nextProfile)
   }
 
   const deleteAccount = async (options?: { signOut?: boolean }) => {
@@ -537,12 +612,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await deleteUserAccount(user.uid)
     try {
       if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(`krocam_profile_form_${user.uid}`)
+        window.localStorage.removeItem(deliveryProfileStorageKey(user.uid))
       }
     } catch {
       // ignorar
     }
     setStoredAdminUid(null)
+    profileRef.current = null
     setProfile(null)
     if (options?.signOut !== false) {
       await signOut(auth)
