@@ -59,7 +59,7 @@ export function slugifyMenuId(title: string): string {
 
 export type MenuLoadState =
   | { status: 'loading' }
-  | { status: 'ready'; sections: MenuCategory[]; source: 'firestore' | 'fallback' }
+  | { status: 'ready'; sections: MenuCategory[]; source: 'firestore' }
   | { status: 'error'; message: string; sections: MenuCategory[] }
 
 /**

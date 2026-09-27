@@ -1,6 +1,7 @@
 import { Route, Switch } from 'react-router-dom'
 import LoginPage from '../features/auth/LoginPage'
 import AdminReviewsPage from '../features/admin/AdminReviewsPage'
+import AdminMembershipPage from '../features/admin/AdminMembershipPage'
 import NotificationsPage from '../features/notifications/NotificationsPage'
 import PrivacyPolicyPage from '../features/legal/PrivacyPolicyPage'
 import TermsPage from '../features/legal/TermsPage'
@@ -36,6 +37,11 @@ export function AppRoutes() {
       <Route exact path={ROUTES.ADMIN_REVIEWS}>
         <RequireAdmin>
           <AdminReviewsPage />
+        </RequireAdmin>
+      </Route>
+      <Route exact path={ROUTES.ADMIN_MEMBERSHIP}>
+        <RequireAdmin>
+          <AdminMembershipPage />
         </RequireAdmin>
       </Route>
       <Route>

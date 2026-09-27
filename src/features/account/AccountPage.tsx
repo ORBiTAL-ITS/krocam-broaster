@@ -25,6 +25,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useDeliveryProfileForm } from '../../hooks/useDeliveryProfileForm'
 import { TabHomeButton } from '../../components/layout/TabHomeButton'
 import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
+import { useMembership } from '../../hooks/useMembership'
+import { MembershipCard } from '../../features/membership/MembershipCard'
 import { ROUTES } from '../../routes/paths'
 
 export default function AccountPage() {
@@ -40,11 +42,13 @@ export default function AccountPage() {
     setBarrio,
     setAddress,
     setNotes,
-    refreshFromStorage,
+    refreshFromProfile,
   } = useDeliveryProfileForm()
 
+  const { isProgramVisible, config, currentStamps, rewardPending } = useMembership()
+
   useIonViewWillEnter(() => {
-    refreshFromStorage()
+    refreshFromProfile()
   })
 
   const [saving, setSaving] = useState(false)
@@ -179,6 +183,15 @@ export default function AccountPage() {
               </IonButton>
             </form>
           </section>
+
+          {isProgramVisible && (
+            <MembershipCard
+              config={config}
+              currentStamps={currentStamps}
+              rewardPending={rewardPending}
+              phone={phone}
+            />
+          )}
 
           <section className="rounded-2xl bg-white border border-gray-200 p-5 shadow-sm space-y-3">
             <IonButton

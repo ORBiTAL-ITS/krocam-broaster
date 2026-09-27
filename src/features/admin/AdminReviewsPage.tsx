@@ -14,9 +14,8 @@ import {
 } from '@ionic/react'
 import { checkmarkCircleOutline, closeCircleOutline } from 'ionicons/icons'
 import { useEffect, useState } from 'react'
-import { useHistory } from 'react-router-dom'
+import { AdminPageBackButton } from '../../components/layout/AdminPageBackButton'
 import { StarRating } from '../../components/reviews/StarRating'
-import { ROUTES } from '../../routes/paths'
 import {
   setReviewStatus,
   subscribePendingReviews,
@@ -24,7 +23,6 @@ import {
 import { reviewTargetLabel, type Review } from '../../types/review'
 
 export default function AdminReviewsPage() {
-  const history = useHistory()
   const [pending, setPending] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -59,16 +57,9 @@ export default function AdminReviewsPage() {
 
   return (
     <IonPage>
-      <IonHeader>
+      <IonHeader className="ion-no-border">
         <IonToolbar className="krocam-toolbar">
-          <IonButton
-            slot="start"
-            fill="clear"
-            color="light"
-            onClick={() => history.push(ROUTES.ADMIN_ORDERS)}
-          >
-            Volver
-          </IonButton>
+          <AdminPageBackButton />
           <IonTitle className="krocam-font-title text-white">Reseñas pendientes</IonTitle>
         </IonToolbar>
       </IonHeader>

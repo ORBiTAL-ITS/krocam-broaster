@@ -17,6 +17,7 @@ import { Capacitor } from '@capacitor/core'
 import { closeOutline } from 'ionicons/icons'
 import { useEffect, useState } from 'react'
 import { useDeliveryProfileForm } from '../../../hooks/useDeliveryProfileForm'
+import { useMembership } from '../../../hooks/useMembership'
 
 export interface CheckoutDeliveryData {
   phone: string
@@ -51,6 +52,9 @@ export function CheckoutModal({
     setAddress: setDeliveryAddress,
     setNotes: setDeliveryNotes,
   } = useDeliveryProfileForm({ active: isOpen })
+
+  const { isProgramVisible, stampHintForTotal } = useMembership()
+  const membershipHint = stampHintForTotal?.(totalPrice) ?? null
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
@@ -291,6 +295,9 @@ export function CheckoutModal({
               <p className="krocam-font-title text-xl font-bold text-gray-900">
                 {formatCurrency(totalPrice)}
               </p>
+              {isProgramVisible && membershipHint && (
+                <p className="text-xs text-amber-700 mt-1">{membershipHint}</p>
+              )}
             </div>
             <IonButton
               className="krocam-font-title krocam-btn-danger font-semibold px-6"

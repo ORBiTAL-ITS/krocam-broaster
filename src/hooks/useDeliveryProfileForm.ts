@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import {
-  mergeDeliveryProfileFields,
-  readStoredDeliveryProfile,
-  writeStoredDeliveryProfile,
-} from '../services/deliveryProfileStorage'
 
 interface UseDeliveryProfileFormOptions {
   /** Si false, no carga ni persiste (p. ej. modal cerrado). */
   active?: boolean
 }
 
+/**
+ * Formulario de datos de entrega sincronizado solo con `users/{uid}` en Firestore.
+ */
 export function useDeliveryProfileForm({
   active = true,
 }: UseDeliveryProfileFormOptions = {}) {
@@ -19,122 +17,84 @@ export function useDeliveryProfileForm({
   const [barrio, setBarrioState] = useState('')
   const [address, setAddressState] = useState('')
   const [notes, setNotesState] = useState('')
-  const initializedRef = useRef(false)
-  const profileSyncedRef = useRef(false)
-  const userEditedRef = useRef(false)
-  const skipPersistRef = useRef(false)
+  const [edited, setEdited] = useState(false)
+  const [syncedKey, setSyncedKey] = useState<string | null>(null)
   const firebaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const profileKey =
+    active && user?.uid && !profileLoading
+      ? JSON.stringify([
+          user.uid,
+          profile?.phone ?? '',
+          profile?.barrio ?? '',
+          profile?.address ?? '',
+          profile?.notes ?? '',
+        ])
+      : null
+
+  const applyProfile = useCallback(() => {
+    setPhoneState(profile?.phone ?? '')
+    setBarrioState(profile?.barrio ?? '')
+    setAddressState(profile?.address ?? '')
+    setNotesState(profile?.notes ?? '')
+    setEdited(false)
+  }, [profile])
+
+  // Mientras el usuario no edite, el formulario refleja lo último que llegó de Firestore.
+  if (profileKey !== syncedKey && (profileKey === null || !edited)) {
+    setSyncedKey(profileKey)
+    if (profileKey === null) {
+      setEdited(false)
+    } else {
+      applyProfile()
+    }
+  }
+
   const setPhone = useCallback((value: string) => {
-    userEditedRef.current = true
+    setEdited(true)
     setPhoneState(value)
   }, [])
 
   const setBarrio = useCallback((value: string) => {
-    userEditedRef.current = true
+    setEdited(true)
     setBarrioState(value)
   }, [])
 
   const setAddress = useCallback((value: string) => {
-    userEditedRef.current = true
+    setEdited(true)
     setAddressState(value)
   }, [])
 
   const setNotes = useCallback((value: string) => {
-    userEditedRef.current = true
+    setEdited(true)
     setNotesState(value)
   }, [])
 
   useEffect(() => {
-    if (!active) {
-      initializedRef.current = false
-      profileSyncedRef.current = false
-      userEditedRef.current = false
-    }
-  }, [active])
+    if (!active || !user?.uid || !edited) return
+    if (!phone.trim() || !barrio.trim() || !address.trim()) return
 
-  useEffect(() => {
-    if (!active || !user?.uid || initializedRef.current) return
-
-    const stored = readStoredDeliveryProfile(user.uid)
-    const merged = mergeDeliveryProfileFields(
-      stored,
-      profileLoading ? undefined : profile,
-    )
-
-    skipPersistRef.current = true
-    setPhoneState(merged.phone)
-    setBarrioState(merged.barrio)
-    setAddressState(merged.address)
-    setNotesState(merged.notes)
-    skipPersistRef.current = false
-    initializedRef.current = true
-  }, [active, user?.uid, profile, profileLoading])
-
-  useEffect(() => {
-    if (!active || !user?.uid || !initializedRef.current || profileLoading) return
-    if (!profile || profileSyncedRef.current || userEditedRef.current) return
-
-    skipPersistRef.current = true
-    setPhoneState((prev) => prev.trim() || profile.phone || '')
-    setBarrioState((prev) => prev.trim() || profile.barrio || '')
-    setAddressState((prev) => prev.trim() || profile.address || '')
-    setNotesState((prev) => prev.trim() || profile.notes || '')
-    skipPersistRef.current = false
-    profileSyncedRef.current = true
-  }, [active, user?.uid, profile, profileLoading])
-
-  const persistFields = useCallback(
-    (fields: { phone: string; barrio: string; address: string; notes: string }) => {
-      if (!user?.uid) return
-
-      writeStoredDeliveryProfile(user.uid, fields)
-
-      const complete =
-        fields.phone.trim() && fields.barrio.trim() && fields.address.trim()
-      if (!complete) return
-
-      if (firebaseTimerRef.current) clearTimeout(firebaseTimerRef.current)
-      firebaseTimerRef.current = setTimeout(() => {
-        void saveProfile({
-          phone: fields.phone.trim(),
-          barrio: fields.barrio.trim(),
-          address: fields.address.trim(),
-          notes: fields.notes.trim(),
-        }).catch(() => {})
-      }, 600)
-    },
-    [user?.uid, saveProfile],
-  )
-
-  useEffect(() => {
-    if (!active || !user?.uid || !initializedRef.current || skipPersistRef.current) {
-      return
-    }
-    persistFields({ phone, barrio, address, notes })
-  }, [phone, barrio, address, notes, active, user?.uid, persistFields])
-
-  const refreshFromStorage = useCallback(() => {
-    if (!user?.uid) return
-
-    const stored = readStoredDeliveryProfile(user.uid)
-    const merged = mergeDeliveryProfileFields(stored, profile)
-
-    skipPersistRef.current = true
-    setPhoneState(merged.phone)
-    setBarrioState(merged.barrio)
-    setAddressState(merged.address)
-    setNotesState(merged.notes)
-    skipPersistRef.current = false
-    userEditedRef.current = false
-    profileSyncedRef.current = true
-  }, [user?.uid, profile])
+    if (firebaseTimerRef.current) clearTimeout(firebaseTimerRef.current)
+    firebaseTimerRef.current = setTimeout(() => {
+      void saveProfile({
+        phone: phone.trim(),
+        barrio: barrio.trim(),
+        address: address.trim(),
+        notes: notes.trim(),
+      }).catch(() => {})
+    }, 600)
+  }, [phone, barrio, address, notes, edited, active, user?.uid, saveProfile])
 
   useEffect(() => {
     return () => {
       if (firebaseTimerRef.current) clearTimeout(firebaseTimerRef.current)
     }
   }, [])
+
+  const refreshFromProfile = useCallback(() => {
+    applyProfile()
+    setSyncedKey(profileKey)
+  }, [applyProfile, profileKey])
 
   return {
     phone,
@@ -145,6 +105,6 @@ export function useDeliveryProfileForm({
     setBarrio,
     setAddress,
     setNotes,
-    refreshFromStorage,
+    refreshFromProfile,
   }
 }

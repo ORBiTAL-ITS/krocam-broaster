@@ -1,14 +1,13 @@
 /**
- * Cloud Functions: notificaciones push (FCM).
- * - Callable sendBroadcastNotification: solo admins; mensaje a todos los tokens en users.*.fcmTokens.
- * - Pedido nuevo → admins.
- * - Cambio de estado del pedido → cliente del pedido.
+ * Cloud Functions: notificaciones push (FCM) y programa de membresía (sellos).
  */
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import * as functionsV1 from 'firebase-functions/v1';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { initializeApp } from 'firebase-admin/app';
+import { creditLoyaltyStamp, getMembershipConfig, recalculateRewardPendingForAll, redeemRewardForUser, resetProgressForUser, revokeLoyaltyStamp, } from './loyalty.js';
+import { listUsersWithPendingRewards as listPendingRewardUsers, searchUserByUid, searchUsersByPhone, } from './adminSearch.js';
 initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
@@ -18,7 +17,14 @@ const STATUS_LABELS = {
     en_preparacion: 'En preparación',
     despachado: 'Despachado',
     entregado: 'Entregado',
+    cancelado: 'Cancelado',
 };
+async function assertAdmin(uid) {
+    const adminSnap = await db.collection('users').doc(uid).get();
+    if (adminSnap.data()?.role !== 'admin') {
+        throw new functionsV1.https.HttpsError('permission-denied', 'Solo administradores pueden realizar esta acción.');
+    }
+}
 async function getTokensForUser(uid) {
     const userSnap = await db.collection('users').doc(uid).get();
     const raw = userSnap.data()?.fcmTokens;
@@ -31,7 +37,6 @@ async function getTokensForUser(uid) {
     }
     return [...new Set(out)];
 }
-/** Todos los tokens FCM registrados en perfiles de usuario (Android, iOS y web). */
 async function getAllUserFcmTokens() {
     const usersSnap = await db.collection('users').get();
     const tokens = [];
@@ -46,7 +51,6 @@ async function getAllUserFcmTokens() {
     }
     return [...new Set(tokens)];
 }
-/** Todos los tokens FCM de usuarios con role === 'admin' en Firestore. */
 async function getAdminTokens() {
     const usersSnap = await db.collection('users').where('role', '==', 'admin').get();
     const tokens = [];
@@ -111,10 +115,6 @@ async function sendMulticastCountResults(tokenList, title, body, data) {
     }
     return { successCount, failureCount };
 }
-/**
- * Solo admins: notificación masiva FCM. Callable en 1.ª gen. (GCF clásico) para que
- * la URL `us-central1-PROJECT.cloudfunctions.net/...` y CORS/OPTIONS funcionen con el SDK web.
- */
 export const sendBroadcastNotification = functionsV1
     .region(CALLABLE_REGION)
     .runWith({ timeoutSeconds: 300, memory: '512MB' })
@@ -122,10 +122,7 @@ export const sendBroadcastNotification = functionsV1
     if (!context.auth?.uid) {
         throw new functionsV1.https.HttpsError('unauthenticated', 'Debes iniciar sesión.');
     }
-    const adminSnap = await db.collection('users').doc(context.auth.uid).get();
-    if (adminSnap.data()?.role !== 'admin') {
-        throw new functionsV1.https.HttpsError('permission-denied', 'Solo administradores pueden enviar notificaciones masivas.');
-    }
+    await assertAdmin(context.auth.uid);
     const rawTitle = data?.title;
     const rawBody = data?.body;
     const title = typeof rawTitle === 'string' ? rawTitle.trim() : '';
@@ -154,13 +151,72 @@ export const sendBroadcastNotification = functionsV1
             : `Enviado a ${successCount} dispositivo(s).`,
     };
 });
+export const redeemLoyaltyReward = functionsV1
+    .region(CALLABLE_REGION)
+    .https.onCall(async (data, context) => {
+    if (!context.auth?.uid) {
+        throw new functionsV1.https.HttpsError('unauthenticated', 'Debes iniciar sesión.');
+    }
+    await assertAdmin(context.auth.uid);
+    const userId = typeof data?.userId === 'string' ? data.userId.trim() : '';
+    if (!userId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'Falta userId.');
+    }
+    await redeemRewardForUser(userId);
+    return { message: 'Premio canjeado y progreso reiniciado.' };
+});
+export const resetLoyaltyProgress = functionsV1
+    .region(CALLABLE_REGION)
+    .https.onCall(async (data, context) => {
+    if (!context.auth?.uid) {
+        throw new functionsV1.https.HttpsError('unauthenticated', 'Debes iniciar sesión.');
+    }
+    await assertAdmin(context.auth.uid);
+    const userId = typeof data?.userId === 'string' ? data.userId.trim() : '';
+    if (!userId) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'Falta userId.');
+    }
+    await resetProgressForUser(userId);
+    return { message: 'Progreso de membresía restablecido.' };
+});
+/** Búsqueda de clientes para membresía (Admin SDK; no depende de list en reglas del cliente). */
+export const searchMembershipUsers = functionsV1
+    .region(CALLABLE_REGION)
+    .https.onCall(async (data, context) => {
+    if (!context.auth?.uid) {
+        throw new functionsV1.https.HttpsError('unauthenticated', 'Debes iniciar sesión.');
+    }
+    await assertAdmin(context.auth.uid);
+    if (data?.pendingOnly === true) {
+        const users = await listPendingRewardUsers();
+        return { users };
+    }
+    const uid = typeof data?.uid === 'string' ? data.uid.trim() : '';
+    if (uid) {
+        const user = await searchUserByUid(uid);
+        return { users: user ? [user] : [] };
+    }
+    const phone = typeof data?.phone === 'string' ? data.phone.trim() : '';
+    if (!phone) {
+        throw new functionsV1.https.HttpsError('invalid-argument', 'Indica teléfono, UID o pendingOnly.');
+    }
+    const users = await searchUsersByPhone(phone);
+    return { users };
+});
+export const onMembershipConfigUpdated = onDocumentUpdated('config/membership', async () => {
+    await recalculateRewardPendingForAll();
+});
 export const onOrderCreated = onDocumentCreated('orders/{orderId}', async (event) => {
     const snap = event.data;
     if (!snap?.exists)
         return;
     const data = snap.data();
     const totalPrice = data?.totalPrice ?? 0;
-    const totalFormatted = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(totalPrice);
+    const totalFormatted = new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        maximumFractionDigits: 0,
+    }).format(totalPrice);
     const orderIdShort = event.params.orderId.slice(-6);
     const title = 'Nuevo pedido';
     const body = `Pedido #${orderIdShort}. Total: ${totalFormatted}.`;
@@ -179,8 +235,33 @@ export const onOrderUpdated = onDocumentUpdated('orders/{orderId}', async (event
     if (statusBefore === statusAfter)
         return;
     const userId = after?.userId;
-    if (!userId)
+    if (!userId || typeof userId !== 'string')
         return;
+    const orderId = event.params.orderId;
+    const totalPrice = typeof after?.totalPrice === 'number' ? after.totalPrice : 0;
+    const config = await getMembershipConfig();
+    if (statusAfter === 'entregado' && statusBefore !== 'entregado') {
+        const stampResult = await creditLoyaltyStamp(orderId, userId, totalPrice);
+        if (stampResult?.credited) {
+            const clientTokens = await getTokensForUser(userId);
+            if (stampResult.rewardPending) {
+                await sendToTokens(clientTokens, '¡Premio de membresía listo!', `Completaste tu tarjeta. Tienes ${stampResult.rewardTitle} disponible.`, { type: 'loyalty_reward_ready', orderId });
+            }
+            else {
+                const required = config?.stampsRequired ?? stampResult.currentStamps;
+                await sendToTokens(clientTokens, '¡Ganaste un sello!', `Llevas ${stampResult.currentStamps} de ${required} sellos.`, { type: 'loyalty_stamp', orderId });
+            }
+        }
+    }
+    if (statusAfter === 'cancelado' && statusBefore !== 'cancelado') {
+        const revokeResult = await revokeLoyaltyStamp(orderId, userId);
+        const clientTokens = await getTokensForUser(userId);
+        await sendToTokens(clientTokens, 'Pedido cancelado', 'Tu pedido fue cancelado por el negocio. Si tienes dudas, contáctanos.', { type: 'order_status', orderId, status: statusAfter });
+        if (revokeResult?.revoked) {
+            await sendToTokens(clientTokens, 'Membresía actualizada', 'Tu progreso de membresía fue actualizado por un ajuste en tu pedido.', { type: 'loyalty_revoked', orderId });
+        }
+        return;
+    }
     const label = STATUS_LABELS[statusAfter] ?? statusAfter;
     const title = 'Estado de tu pedido';
     const body = statusAfter === 'despachado'
@@ -188,7 +269,7 @@ export const onOrderUpdated = onDocumentUpdated('orders/{orderId}', async (event
         : `${label}.`;
     const payload = {
         type: 'order_status',
-        orderId: event.params.orderId,
+        orderId,
         status: statusAfter,
     };
     const clientTokens = await getTokensForUser(userId);

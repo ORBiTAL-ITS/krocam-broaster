@@ -1,44 +1,24 @@
 import { useEffect, useState } from 'react'
 import { MENU_SECTIONS } from '../data/menuSections'
 import type { MenuCategory } from '../types/menu'
-import { parsePriceCop } from '../types/menu'
 import { subscribeMenu, type MenuLoadState } from '../services/menuService'
-
-function staticFallbackSections(): MenuCategory[] {
-  return MENU_SECTIONS.map((sec, index) => ({
-    id: sec.id,
-    title: sec.title,
-    sortOrder: index,
-    heroImageBase64: null,
-    heroImageAlt: sec.heroImageAlt,
-    active: true,
-    combos: sec.combos.map((c, ci) => ({
-      id: String(c.id),
-      title: c.title,
-      description: c.description,
-      priceCop: parsePriceCop(c.price),
-      sortOrder: ci,
-      active: true,
-    })),
-  }))
-}
 
 export interface UseMenuResult {
   sections: MenuCategory[]
   getHeroSrc: (category: MenuCategory) => string
   loading: boolean
   error: string | null
-  source: 'firestore' | 'fallback' | 'static'
+  source: 'firestore' | 'empty'
 }
 
+/** Menú en tiempo real desde Firestore; sin datos locales de respaldo. */
 export function useMenu(includeInactive = false): UseMenuResult {
-  const [sections, setSections] = useState<MenuCategory[]>(staticFallbackSections())
+  const [sections, setSections] = useState<MenuCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [source, setSource] = useState<'firestore' | 'fallback' | 'static'>('static')
+  const [source, setSource] = useState<'firestore' | 'empty'>('empty')
 
   useEffect(() => {
-    const fallback = staticFallbackSections()
     const unsub = subscribeMenu(
       (state: MenuLoadState) => {
         if (state.status === 'loading') {
@@ -47,13 +27,13 @@ export function useMenu(includeInactive = false): UseMenuResult {
         }
         if (state.status === 'ready') {
           setSections(state.sections)
-          setSource(state.source)
+          setSource('firestore')
           setError(null)
           setLoading(false)
           return
         }
-        setSections(fallback)
-        setSource('fallback')
+        setSections([])
+        setSource('empty')
         setError(state.message === 'empty' ? null : state.message)
         setLoading(false)
       },
@@ -64,8 +44,8 @@ export function useMenu(includeInactive = false): UseMenuResult {
 
   const getHeroSrc = (category: MenuCategory): string => {
     if (category.heroImageBase64) return category.heroImageBase64
-    const staticSec = MENU_SECTIONS.find((s) => s.id === category.id)
-    return staticSec?.heroImageSrc ?? ''
+    const bundledImage = MENU_SECTIONS.find((s) => s.id === category.id)
+    return bundledImage?.heroImageSrc ?? ''
   }
 
   return { sections, getHeroSrc, loading, error, source }

@@ -12,8 +12,19 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isValidOrderCreate() {
+      return request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pendiente'
+        && request.resource.data.totalPrice is number
+        && request.resource.data.totalPrice > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0;
+    }
+
     match /users/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /users/{userId}/inbox/{notifId} {
@@ -23,7 +34,7 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && isValidOrderCreate();
       allow read: if isSignedIn()
         && (resource.data.userId == request.auth.uid || isAdmin());
       allow update: if isAdmin();
@@ -57,8 +68,16 @@ service cloud.firestore {
     }
 
     match /config/{docId} {
-      allow read: if docId == 'whatsapp' || isAdmin();
+      allow read: if docId == 'whatsapp'
+        || (docId == 'membership' && resource.data.enabled == true)
+        || isAdmin();
       allow write: if isAdmin();
+    }
+
+    match /loyaltyProgress/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
     }
 
     match /meta/{docId} {

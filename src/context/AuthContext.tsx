@@ -16,7 +16,7 @@ import {
   signInWithRedirect,
   signOut,
 } from 'firebase/auth'
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { deleteUserAccount } from '../services/accountService'
 import { Capacitor } from '@capacitor/core'
 import { SocialLogin } from '@capgo/capacitor-social-login'
@@ -32,11 +32,6 @@ import {
   subscribeWebForegroundPush,
   webPushRequiresUserGesture,
 } from '../services/pushNotifications'
-import {
-  deliveryProfileStorageKey,
-  writeStoredDeliveryProfile,
-} from '../services/deliveryProfileStorage'
-
 interface AuthContextValue {
   user: User | null
   loading: boolean
@@ -87,7 +82,8 @@ const FIREBASE_AUTH_DOMAIN = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as
   | string
   | undefined
 
-const ADMIN_UID_STORAGE_KEY = 'krocam:adminUid'
+const LEGACY_ADMIN_UID_KEY = 'krocam:adminUid'
+const LEGACY_PROFILE_KEY_PREFIX = 'krocam_profile_form_'
 
 interface FirestoreUserDoc {
   active?: boolean
@@ -101,68 +97,42 @@ interface FirestoreUserDoc {
   deactivatedAt?: { toDate?: () => Date }
 }
 
-function getStoredAdminUid(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const value = window.localStorage.getItem(ADMIN_UID_STORAGE_KEY)
-    return value && value.trim() ? value.trim() : null
-  } catch {
-    return null
-  }
-}
-
-function setStoredAdminUid(uid: string | null) {
+/** Borra datos que versiones anteriores guardaban en el dispositivo; la fuente es solo Firestore. */
+function purgeLegacyLocalCache() {
   if (typeof window === 'undefined') return
   try {
-    if (!uid) {
-      window.localStorage.removeItem(ADMIN_UID_STORAGE_KEY)
-    } else {
-      window.localStorage.setItem(ADMIN_UID_STORAGE_KEY, uid)
+    const keys: string[] = []
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i)
+      if (key && (key === LEGACY_ADMIN_UID_KEY || key.startsWith(LEGACY_PROFILE_KEY_PREFIX))) {
+        keys.push(key)
+      }
     }
+    keys.forEach((key) => window.localStorage.removeItem(key))
   } catch {
-    // Ignorar errores de acceso a storage (modo incógnito, etc.)
+    // Storage no disponible
   }
 }
 
-function normalizeFirestoreRole(role: unknown): string {
-  return typeof role === 'string' ? role.trim().toLowerCase() : ''
-}
-
-/** Admin si Firestore, memoria o caché local coinciden con este uid. */
-function resolveAdminRole(
-  uid: string,
-  firestoreRole: unknown,
-  memoryRole?: 'admin' | 'customer',
-): 'admin' | undefined {
-  const storedAdminUid = getStoredAdminUid()
-  const isAdmin =
-    normalizeFirestoreRole(firestoreRole) === 'admin' ||
-    memoryRole === 'admin' ||
-    storedAdminUid === uid
-
-  if (isAdmin) {
-    setStoredAdminUid(uid)
-    return 'admin'
-  }
+function parseFirestoreRole(role: unknown): UserProfile['role'] {
+  const normalized = typeof role === 'string' ? role.trim().toLowerCase() : ''
+  if (normalized === 'admin') return 'admin'
+  if (normalized === 'customer') return 'customer'
   return undefined
 }
 
-async function fetchUserProfileDoc(
-  ref: ReturnType<typeof doc>,
-  attempts = 3,
-): Promise<Awaited<ReturnType<typeof getDoc>>> {
-  let lastError: unknown
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    if (attempt > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
-    }
-    try {
-      return await getDoc(ref)
-    } catch (error) {
-      lastError = error
-    }
+function mapUserProfile(data: FirestoreUserDoc): UserProfile {
+  return {
+    phone: data.phone ?? '',
+    barrio: data.barrio ?? '',
+    address: data.address ?? '',
+    notes: data.notes ?? '',
+    role: parseFirestoreRole(data.role),
+    active: true,
+    createdAt: data.createdAt?.toDate?.() ?? undefined,
+    updatedAt: data.updatedAt?.toDate?.() ?? undefined,
+    deactivatedAt: data.deactivatedAt?.toDate?.() ?? undefined,
   }
-  throw lastError
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -171,7 +141,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const mountedRef = useRef(true)
-  const profileRef = useRef<UserProfile | null>(null)
+
+  useEffect(() => {
+    purgeLegacyLocalCache()
+  }, [])
 
   // Inicialización SocialLogin (Google y Apple) en entornos nativos.
   useEffect(() => {
@@ -229,101 +202,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     mountedRef.current = true
 
-    const applyUser = async (firebaseUser: User | null) => {
+    const applyUser = (firebaseUser: User | null) => {
       setUser(firebaseUser)
       if (!firebaseUser) {
-        // No borrar krocam:adminUid aquí: Firebase a veces emite null al refrescar el
-        // token en iOS/Android y eso hacía perder el rol admin hasta el próximo login.
-        profileRef.current = null
         setProfile(null)
         setProfileLoading(false)
-        setLoading(false)
-        return
+      } else {
+        setProfileLoading(true)
       }
-      setProfileLoading(true)
-      const memoryRole = profileRef.current?.role
-      try {
-        const ref = doc(db, 'users', firebaseUser.uid)
-        const snap = await fetchUserProfileDoc(ref)
-        if (snap.exists()) {
-          const data = snap.data() as FirestoreUserDoc
-          if (data.active === false) {
-            profileRef.current = null
-            setProfile(null)
-            setProfileLoading(false)
-            setLoading(false)
-            return
-          }
-          const effectiveRole = resolveAdminRole(
-            firebaseUser.uid,
-            data.role,
-            memoryRole,
-          )
-
-          const nextProfile: UserProfile = {
-            phone: data.phone ?? '',
-            barrio: data.barrio ?? '',
-            address: data.address ?? '',
-            notes: data.notes ?? '',
-            role: effectiveRole,
-            active: true,
-            createdAt: data.createdAt?.toDate?.() ?? undefined,
-            updatedAt: data.updatedAt?.toDate?.() ?? undefined,
-            deactivatedAt: data.deactivatedAt?.toDate?.() ?? undefined,
-          }
-          profileRef.current = nextProfile
-          setProfile(nextProfile)
-        } else {
-          const effectiveRole = resolveAdminRole(
-            firebaseUser.uid,
-            undefined,
-            memoryRole,
-          )
-          if (effectiveRole === 'admin') {
-            const nextProfile: UserProfile = {
-              phone: '',
-              barrio: '',
-              address: '',
-              notes: '',
-              role: 'admin',
-              active: true,
-              createdAt: undefined,
-              updatedAt: undefined,
-            }
-            profileRef.current = nextProfile
-            setProfile(nextProfile)
-          } else {
-            profileRef.current = null
-            setProfile(null)
-          }
-        }
-      } catch {
-        const effectiveRole = resolveAdminRole(
-          firebaseUser.uid,
-          undefined,
-          memoryRole,
-        )
-        if (effectiveRole === 'admin') {
-          const nextProfile: UserProfile = {
-            phone: profileRef.current?.phone ?? '',
-            barrio: profileRef.current?.barrio ?? '',
-            address: profileRef.current?.address ?? '',
-            notes: profileRef.current?.notes ?? '',
-            role: 'admin',
-            active: true,
-            createdAt: profileRef.current?.createdAt,
-            updatedAt: profileRef.current?.updatedAt,
-          }
-          profileRef.current = nextProfile
-          setProfile(nextProfile)
-        } else {
-          profileRef.current = null
-          setProfile(null)
-        }
-      } finally {
-        setProfileLoading(false)
-        setLoading(false)
-      }
+      setLoading(false)
     }
 
     let unsubscribe: (() => void) | undefined
@@ -356,8 +243,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  // Salvavidas: no bloquear la UI si Auth tarda (WebView nativa). El perfil tiene
-  // su propio tiempo de espera para no marcar "no admin" antes de leer Firestore.
+  useEffect(() => {
+    if (!user?.uid) return
+    setProfileLoading(true)
+    const unsubscribe = onSnapshot(
+      doc(db, 'users', user.uid),
+      (snap) => {
+        const data = snap.exists() ? (snap.data() as FirestoreUserDoc) : null
+        setProfile(data && data.active !== false ? mapUserProfile(data) : null)
+        setProfileLoading(false)
+      },
+      (err) => {
+        console.warn('[AuthContext] perfil Firestore', err)
+        setProfile(null)
+        setProfileLoading(false)
+      },
+    )
+    return () => unsubscribe()
+  }, [user?.uid])
+
+  // Salvavidas: no bloquear la UI si Auth tarda (WebView nativa).
   useEffect(() => {
     if (!loading) return
     const timeoutId = setTimeout(() => setLoading(false), 8000)
@@ -546,8 +451,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const logout = async () => {
-    setStoredAdminUid(null)
-    profileRef.current = null
     await signOut(auth)
   }
 
@@ -570,34 +473,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       payload.createdAt = serverTimestamp()
     }
     await setDoc(ref, payload, { merge: true })
-
-    writeStoredDeliveryProfile(user.uid, {
-      phone: String(payload.phone),
-      barrio: String(payload.barrio),
-      address: String(payload.address),
-      notes: String(payload.notes),
-    })
-
-    const existingRole = existing.exists() ? existing.data().role : undefined
-    const effectiveRole = resolveAdminRole(
-      user.uid,
-      existingRole,
-      profileRef.current?.role ?? profile?.role,
-    )
-
-    const nextProfile: UserProfile = {
-      phone: data.phone,
-      barrio: data.barrio,
-      address: data.address,
-      notes: data.notes ?? '',
-      role: effectiveRole,
-      active: true,
-      createdAt: profileRef.current?.createdAt ?? profile?.createdAt,
-      updatedAt: new Date(),
-      deactivatedAt: profileRef.current?.deactivatedAt ?? profile?.deactivatedAt,
-    }
-    profileRef.current = nextProfile
-    setProfile(nextProfile)
   }
 
   const deleteAccount = async (options?: { signOut?: boolean }) => {
@@ -610,15 +485,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       )
     }
     await deleteUserAccount(user.uid)
-    try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(deliveryProfileStorageKey(user.uid))
-      }
-    } catch {
-      // ignorar
-    }
-    setStoredAdminUid(null)
-    profileRef.current = null
     setProfile(null)
     if (options?.signOut !== false) {
       await signOut(auth)

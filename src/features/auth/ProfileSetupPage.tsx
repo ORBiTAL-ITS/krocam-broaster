@@ -25,26 +25,7 @@ export default function ProfileSetupPage({ onContinue }: ProfileSetupPageProps =
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const storageKey = user?.uid ? `krocam_profile_form_${user.uid}` : null
-
-  // 1) Cargar desde localStorage (últimos datos conocidos), para que funcione aunque Firebase falle o esté lento.
-  useEffect(() => {
-    if (!storageKey) return
-    try {
-      const raw = localStorage.getItem(storageKey)
-      if (!raw) return
-      const data = JSON.parse(raw) as { phone?: string; barrio?: string; address?: string; notes?: string }
-      setPhone(data.phone ?? '')
-      setBarrio(data.barrio ?? '')
-      setAddress(data.address ?? '')
-      setNotes(data.notes ?? '')
-    } catch {
-      // Ignorar errores de parseo / localStorage
-    }
-  }, [storageKey])
-
-  // 2) Sincronizar con el perfil de Firebase cuando deje de cargar.
-  // Solo sobreescribe campos vacíos para no borrar lo que ya viene de localStorage o del usuario.
+  // Solo sobreescribe campos vacíos para no borrar lo que el usuario ya escribió.
   useEffect(() => {
     if (profileLoading || !profile) return
     setPhone((prev) => (prev || profile.phone || ''))
@@ -53,7 +34,6 @@ export default function ProfileSetupPage({ onContinue }: ProfileSetupPageProps =
     setNotes((prev) => (prev || profile.notes || ''))
   }, [profileLoading, profile])
 
-  // Para la UX nos interesa si el formulario ya tiene datos (vengan de Firebase o de localStorage).
   const hasExistingProfileData =
     Boolean(phone.trim()) &&
     Boolean(barrio.trim()) &&
@@ -70,17 +50,6 @@ export default function ProfileSetupPage({ onContinue }: ProfileSetupPageProps =
     setSaving(true)
     try {
       await saveProfile({ phone, barrio, address, notes })
-      // Guardar también en localStorage para que persista incluso si Firebase falla al leer después.
-      if (storageKey) {
-        try {
-          localStorage.setItem(
-            storageKey,
-            JSON.stringify({ phone, barrio, address, notes }),
-          )
-        } catch {
-          // localStorage no disponible
-        }
-      }
       onContinue?.()
     } catch (err: unknown) {
       const message =

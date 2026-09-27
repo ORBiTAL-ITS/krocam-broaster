@@ -14,6 +14,7 @@ import {
   IonSpinner,
   IonToast,
   IonToolbar,
+  IonAlert,
 } from '@ionic/react'
 import {
   collection,
@@ -38,15 +39,16 @@ import { auth, db } from '../../firebase'
 import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { notifyCustomerOrderStatus } from '../../services/notifyOrderStatusPush'
 import { useAuth } from '../../context/AuthContext'
+import {
+  ORDER_STATUSES,
+  canCancelOrder,
+  type OrderDoc,
+  type OrderStatusValue,
+} from '../../types/order'
 
-export const ORDER_STATUSES = [
-  { value: 'pendiente', label: 'Pendiente' },
-  { value: 'en_preparacion', label: 'En preparación' },
-  { value: 'despachado', label: 'Despachado' },
-  { value: 'entregado', label: 'Entregado' },
-] as const
+export { ORDER_STATUSES, type OrderStatusValue }
 
-export type OrderStatusValue = (typeof ORDER_STATUSES)[number]['value']
+const LINEAR_ORDER_STATUSES = ORDER_STATUSES.filter((s) => s.value !== 'cancelado')
 
 const STATUS_STYLES: Record<
   string,
@@ -76,29 +78,16 @@ const STATUS_STYLES: Record<
     border: 'border-l-emerald-600',
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
   },
+  cancelado: {
+    headerBg: 'bg-gray-500',
+    headerText: 'text-white',
+    border: 'border-l-gray-500',
+    badge: 'bg-gray-100 text-gray-800 border-gray-300',
+  },
 }
 
 function getStatusStyle(status: string) {
   return STATUS_STYLES[status] ?? STATUS_STYLES.pendiente
-}
-
-interface OrderItem {
-  id: string
-  name: string
-  section: string
-  unitPrice: number
-  quantity: number
-}
-
-interface OrderDoc {
-  id: string
-  userId: string
-  items: OrderItem[]
-  totalPrice: number
-  delivery: { phone: string; barrio: string; address: string; notes: string }
-  coords: { lat: number; lng: number } | null
-  status: string
-  createdAt: Timestamp | null
 }
 
 interface AdminPageProps {
@@ -157,6 +146,8 @@ export default function AdminPage({
   const [broadcastTitle, setBroadcastTitle] = useState('')
   const [broadcastBody, setBroadcastBody] = useState('')
   const [sendingBroadcast, setSendingBroadcast] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<OrderDoc | null>(null)
+  const [voidDeliveryTarget, setVoidDeliveryTarget] = useState<OrderDoc | null>(null)
 
   const showOrdersSpinner = loading && tab !== 'notificaciones'
   const showOrdersError = error && tab !== 'notificaciones'
@@ -193,13 +184,14 @@ export default function AdminPage({
             coords: data.coords ?? null,
             status: data.status ?? 'pendiente',
             createdAt: data.createdAt ?? null,
+            loyaltyStampCredited: data.loyaltyStampCredited === true,
           }
         })
         list.sort((a, b) => {
-          const aDelivered = a.status === 'entregado'
-          const bDelivered = b.status === 'entregado'
-          if (aDelivered && !bDelivered) return 1
-          if (!aDelivered && bDelivered) return -1
+          const aInactive = a.status === 'entregado' || a.status === 'cancelado'
+          const bInactive = b.status === 'entregado' || b.status === 'cancelado'
+          if (aInactive && !bInactive) return 1
+          if (!aInactive && bInactive) return -1
           const ta = a.createdAt?.toMillis?.() ?? 0
           const tb = b.createdAt?.toMillis?.() ?? 0
           return ta - tb
@@ -273,8 +265,45 @@ export default function AdminPage({
     }
   }
 
+  const handleCancelOrder = async (order: OrderDoc, fromDelivered = false) => {
+    setUpdatingOrderId(order.id)
+    try {
+      await updateDoc(doc(db, 'orders', order.id), {
+        status: 'cancelado',
+        cancelledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelado' } : o)),
+      )
+      try {
+        await notifyCustomerOrderStatus(order.id, 'cancelado')
+      } catch (e) {
+        console.warn('[notifyCustomerOrderStatus]', e)
+      }
+      showAdminToast(
+        fromDelivered
+          ? 'Entrega anulada. Si había sello de membresía, se revocó automáticamente.'
+          : 'Pedido cancelado. El cliente recibirá una notificación.',
+        'success',
+      )
+    } catch {
+      showAdminToast('No se pudo cancelar el pedido.', 'danger')
+    } finally {
+      setUpdatingOrderId(null)
+      setCancelTarget(null)
+      setVoidDeliveryTarget(null)
+    }
+  }
+
+  const deliveredOrders = orders.filter((o) => o.status === 'entregado')
+  const pendingOrders = orders.filter(
+    (o) => o.status !== 'entregado' && o.status !== 'cancelado',
+  )
+
   const today = startOfDay(new Date())
   const ordersToday = orders.filter((o) => {
+    if (o.status !== 'entregado') return false
     const t = o.createdAt?.toMillis?.()
     if (!t) return false
     const orderDate = startOfDay(new Date(t))
@@ -288,6 +317,7 @@ export default function AdminPage({
     d.setDate(d.getDate() - i)
     const key = formatDayKey(d)
     const dayOrders = orders.filter((o) => {
+      if (o.status !== 'entregado') return false
       const t = o.createdAt?.toMillis?.()
       if (!t) return false
       return formatDayKey(new Date(t)) === key
@@ -301,8 +331,6 @@ export default function AdminPage({
   }
   const maxTotal = Math.max(1, ...last7Days.map((d) => d.total))
 
-  const pendingOrders = orders.filter((o) => o.status !== 'entregado')
-  const deliveredOrders = orders.filter((o) => o.status === 'entregado')
   const todayKey = formatDayKey(today)
   const historyFiltered = deliveredOrders.filter((o) => {
     const t = o.createdAt?.toMillis?.()
@@ -416,6 +444,13 @@ export default function AdminPage({
                 </span>
               </IonButton>
             )}
+            <IonButton
+              fill="clear"
+              color="light"
+              onClick={() => history.push(ROUTES.ADMIN_MEMBERSHIP)}
+            >
+              Membresía
+            </IonButton>
             <IonButton
               fill="clear"
               color="light"
@@ -569,7 +604,7 @@ export default function AdminPage({
                 <ul className="space-y-5">
                   {pendingOrders.map((order) => {
                     const style = getStatusStyle(order.status)
-                    const currentIndex = ORDER_STATUSES.findIndex(
+                    const currentIndex = LINEAR_ORDER_STATUSES.findIndex(
                       (s) => s.value === (order.status as OrderStatusValue),
                     )
                     return (
@@ -644,8 +679,26 @@ export default function AdminPage({
                                   {order.delivery.notes}
                                 </p>
                               )}
+                              <p>
+                                <span className="text-gray-500">Cliente UID:</span>{' '}
+                                <button
+                                  type="button"
+                                  className="font-mono text-xs text-blue-600 underline"
+                                  onClick={() =>
+                                    history.push(`${ROUTES.ADMIN_MEMBERSHIP}?uid=${order.userId}`)
+                                  }
+                                >
+                                  {order.userId.slice(0, 8)}…
+                                </button>
+                              </p>
                             </div>
                           </div>
+
+                          {order.loyaltyStampCredited && (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
+                              Sello de membresía acreditado
+                            </span>
+                          )}
 
                           <div className="flex flex-wrap items-center gap-3">
                             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -663,7 +716,7 @@ export default function AdminPage({
                                 interface="action-sheet"
                                 className="min-w-[140px] font-semibold text-sm [--padding-start:0] [--padding-end:0]"
                               >
-                                {ORDER_STATUSES.map((s, idx) => (
+                                {LINEAR_ORDER_STATUSES.map((s, idx) => (
                                   <IonSelectOption
                                     key={s.value}
                                     value={s.value}
@@ -677,6 +730,17 @@ export default function AdminPage({
                                 <IonSpinner name="crescent" className="scale-75 shrink-0" />
                               )}
                             </div>
+                            {canCancelOrder(order.status) && (
+                              <IonButton
+                                color="danger"
+                                fill="outline"
+                                size="small"
+                                disabled={updatingOrderId === order.id}
+                                onClick={() => setCancelTarget(order)}
+                              >
+                                Cancelar pedido
+                              </IonButton>
+                            )}
                           </div>
 
                           <div className="rounded-xl bg-gray-50 p-3 border border-gray-100">
@@ -915,7 +979,46 @@ export default function AdminPage({
                                   {order.delivery.notes}
                                 </p>
                               )}
+                              <p>
+                                <span className="text-gray-500">Cliente UID:</span>{' '}
+                                <button
+                                  type="button"
+                                  className="font-mono text-xs text-blue-600 underline"
+                                  onClick={() =>
+                                    history.push(`${ROUTES.ADMIN_MEMBERSHIP}?uid=${order.userId}`)
+                                  }
+                                >
+                                  {order.userId.slice(0, 8)}…
+                                </button>
+                              </p>
                             </div>
+                          </div>
+
+                          {order.loyaltyStampCredited && (
+                            <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
+                              Sello de membresía acreditado
+                            </span>
+                          )}
+
+                          <div className="flex flex-wrap gap-2">
+                            <IonButton
+                              color="danger"
+                              fill="outline"
+                              size="small"
+                              disabled={updatingOrderId === order.id}
+                              onClick={() => setVoidDeliveryTarget(order)}
+                            >
+                              Anular entrega
+                            </IonButton>
+                            <IonButton
+                              fill="clear"
+                              size="small"
+                              onClick={() =>
+                                history.push(`${ROUTES.ADMIN_MEMBERSHIP}?uid=${order.userId}`)
+                              }
+                            >
+                              Ver membresía
+                            </IonButton>
                           </div>
 
                           <div className="rounded-xl bg-gray-50 p-3 border border-gray-100">
@@ -944,6 +1047,38 @@ export default function AdminPage({
             </div>
           )}
         </div>
+        <IonAlert
+          isOpen={!!cancelTarget}
+          onDidDismiss={() => setCancelTarget(null)}
+          header="¿Cancelar pedido?"
+          message="El cliente verá el pedido como cancelado. Esta acción la realiza solo el negocio."
+          buttons={[
+            { text: 'Volver', role: 'cancel' },
+            {
+              text: 'Cancelar pedido',
+              role: 'destructive',
+              handler: () => {
+                if (cancelTarget) void handleCancelOrder(cancelTarget, false)
+              },
+            },
+          ]}
+        />
+        <IonAlert
+          isOpen={!!voidDeliveryTarget}
+          onDidDismiss={() => setVoidDeliveryTarget(null)}
+          header="¿Anular entrega?"
+          message="Se marcará como cancelado. Si este pedido acreditó un sello de membresía, se revocará automáticamente."
+          buttons={[
+            { text: 'Volver', role: 'cancel' },
+            {
+              text: 'Anular entrega',
+              role: 'destructive',
+              handler: () => {
+                if (voidDeliveryTarget) void handleCancelOrder(voidDeliveryTarget, true)
+              },
+            },
+          ]}
+        />
         <IonToast
           isOpen={toastOpen}
           message={toastMessage}

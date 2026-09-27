@@ -8,6 +8,7 @@ export const ROUTES = {
   ACCOUNT: '/cuenta',
   ADMIN_ORDERS: '/admin/pedidos',
   ADMIN_REVIEWS: '/admin/reseñas',
+  ADMIN_MEMBERSHIP: '/admin/membresia',
   PRIVACY: '/privacy-policy',
   TERMS: '/terms',
   CONTACT: '/contact',

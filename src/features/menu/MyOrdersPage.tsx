@@ -30,6 +30,7 @@ const STATUS_LABELS: Record<string, string> = {
   en_preparacion: 'En preparación',
   despachado: 'Despachado',
   entregado: 'Entregado',
+  cancelado: 'Cancelado por el negocio',
 }
 
 const STATUS_STYLES: Record<
@@ -59,6 +60,12 @@ const STATUS_STYLES: Record<
     text: 'text-emerald-800',
     border: 'border-emerald-200',
     icon: 'text-emerald-600',
+  },
+  cancelado: {
+    bg: 'bg-gray-100',
+    text: 'text-gray-700',
+    border: 'border-gray-300',
+    icon: 'text-gray-500',
   },
 }
 
@@ -120,7 +127,7 @@ export default function MyOrdersPage({ onClosePath = ROUTES.HOME }: MyOrdersPage
               createdAt: data.createdAt ?? null,
             }
           })
-          .filter((o) => o.status !== 'entregado')
+          .filter((o) => o.status !== 'entregado' && o.status !== 'cancelado')
         list.sort((a, b) => {
           const ta = a.createdAt?.toMillis?.() ?? 0
           const tb = b.createdAt?.toMillis?.() ?? 0
