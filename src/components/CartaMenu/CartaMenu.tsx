@@ -8,6 +8,8 @@ import type { ComboItem } from './types'
 
 export interface CartaMenuProps {
   sectionTitle: string
+  /** Texto común bajo el título, editable por el admin desde el panel del menú. */
+  sectionSubtitle: string
   combos: ComboItem[]
   /** Imagen grande superior que representa la sección (alas, pernil, etc.) */
   heroImageSrc: string
@@ -17,6 +19,7 @@ export interface CartaMenuProps {
 
 export function CartaMenu({
   sectionTitle,
+  sectionSubtitle,
   combos,
   heroImageSrc,
   heroImageAlt,
@@ -36,9 +39,11 @@ export function CartaMenu({
           >
             {sectionTitle}
           </h2>
-          <p className="mt-2 text-sm text-gray-800 max-w-md">
-            Elige el combo que más se te antoje. Todos incluyen papas a la francesa, gaseosa personal y salsa de la casa.
-          </p>
+          {sectionSubtitle && (
+            <p className="mt-2 text-sm text-gray-800 max-w-md whitespace-pre-line">
+              {sectionSubtitle}
+            </p>
+          )}
         </div>
         <div className="flex-1 max-w-xs w-full">
           <div className="w-full aspect-[4/3] bg-[var(--krocam-black)] rounded-2xl flex items-center justify-center overflow-hidden">

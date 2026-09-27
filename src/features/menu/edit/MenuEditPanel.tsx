@@ -14,13 +14,16 @@ import {
   upsertCombo,
 } from '../../../services/menuService'
 import { fileToCompressedBase64 } from '../../../services/imageUtils'
+import { saveMenuSectionSubtitle } from '../../../services/appConfig'
 import type { MenuCategory, MenuCombo } from '../../../types/menu'
 import { formatPriceCop } from '../../../types/menu'
 import { CategoryFormModal, type CategoryFormValues } from './CategoryFormModal'
 import { ComboFormModal, type ComboFormValues } from './ComboFormModal'
+import { MenuTextFormModal } from './MenuTextFormModal'
 
 interface MenuEditPanelProps {
   sections: MenuCategory[]
+  sectionSubtitle: string
   seccionActual: number
   onChangeSeccion: (index: number) => void
   onToast: (message: string) => void
@@ -28,11 +31,13 @@ interface MenuEditPanelProps {
 
 export function MenuEditPanel({
   sections,
+  sectionSubtitle,
   seccionActual,
   onChangeSeccion,
   onToast,
 }: MenuEditPanelProps) {
   const current = sections[seccionActual]
+  const [textModalOpen, setTextModalOpen] = useState(false)
   const [dragCatId, setDragCatId] = useState<string | null>(null)
   const [dragComboId, setDragComboId] = useState<string | null>(null)
   const [categoryModal, setCategoryModal] = useState<'new' | 'edit' | null>(null)
@@ -158,6 +163,19 @@ export function MenuEditPanel({
         ))}
       </div>
 
+      <div className="rounded-xl border border-amber-200 bg-white px-3 py-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+            Texto de la carta (todas las categorías)
+          </p>
+          <IonButton size="small" fill="outline" onClick={() => setTextModalOpen(true)}>
+            <IonIcon icon={createOutline} slot="start" />
+            Editar
+          </IonButton>
+        </div>
+        <p className="text-sm text-gray-700 whitespace-pre-line">{sectionSubtitle}</p>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <IonButton size="small" onClick={() => setCategoryModal('new')}>
           Nueva categoría
@@ -257,6 +275,15 @@ export function MenuEditPanel({
           setEditingCombo(null)
         }}
         onSave={(v) => (editingCombo ? saveCombo(v, editingCombo.id) : Promise.resolve())}
+      />
+      <MenuTextFormModal
+        isOpen={textModalOpen}
+        currentText={sectionSubtitle}
+        onClose={() => setTextModalOpen(false)}
+        onSave={async (text) => {
+          await saveMenuSectionSubtitle(text)
+          onToast('Texto de la carta actualizado.')
+        }}
       />
     </div>
   )

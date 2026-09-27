@@ -44,6 +44,7 @@ import { Capacitor } from '@capacitor/core'
 import { useShowBottomTabs } from '../../hooks/useShowBottomTabs'
 import { WebPushActivationBanner } from '../../components/WebPushActivationBanner'
 import { MenuEditPanel } from './edit/MenuEditPanel'
+import { useMenuSectionSubtitle } from '../../hooks/useMenuSectionSubtitle'
 import { ReviewsSection } from '../../components/reviews/ReviewsSection'
 
 /** false = tras confirmar el pedido no se abre WhatsApp (solo notificaciones en la app). */
@@ -57,6 +58,7 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
   const history = useHistory()
   const { isAdmin, canAccessOrdersAdmin } = usePermissions()
   const { sections, getHeroSrc, loading: menuLoading, source: menuSource } = useMenu(editMode)
+  const sectionSubtitle = useMenuSectionSubtitle()
   const [seccionActual, setSeccionActual] = useState(0)
   const [seedMessage, setSeedMessage] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
@@ -356,6 +358,7 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
           {editMode && !menuLoading && (
             <MenuEditPanel
               sections={sections}
+              sectionSubtitle={sectionSubtitle}
               seccionActual={seccionActual}
               onChangeSeccion={setSeccionActual}
               onToast={(msg) => {
@@ -376,6 +379,7 @@ export default function MenuPage({ editMode = false }: MenuPageProps = {}) {
           {!menuLoading && currentSection && (
           <CartaMenu
             sectionTitle={title}
+            sectionSubtitle={sectionSubtitle}
             combos={combos}
             heroImageSrc={heroImageSrc}
             heroImageAlt={heroImageAlt}

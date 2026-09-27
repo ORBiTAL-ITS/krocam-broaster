@@ -69,6 +69,7 @@ service cloud.firestore {
 
     match /config/{docId} {
       allow read: if docId == 'whatsapp'
+        || docId == 'menuTexts'
         || (docId == 'membership' && resource.data.enabled == true)
         || isAdmin();
       allow write: if isAdmin();
