@@ -40,6 +40,10 @@ import { useInboxUnreadCount } from '../../hooks/useInboxUnreadCount'
 import { notifyCustomerOrderStatus } from '../../services/notifyOrderStatusPush'
 import { useAuth } from '../../context/AuthContext'
 import {
+  creditLoyaltyStampForOrder,
+  revokeLoyaltyStampForOrder,
+} from '../../services/membershipService'
+import {
   ORDER_STATUSES,
   canCancelOrder,
   type OrderDoc,
@@ -232,6 +236,26 @@ export default function AdminPage({
     return d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })
   }
 
+  /** Mantiene la carta de fidelidad alineada con el estado del pedido; devuelve texto para el toast. */
+  const syncLoyaltyStamp = async (orderId: string, status: string): Promise<string> => {
+    try {
+      if (status === 'entregado') {
+        const result = await creditLoyaltyStampForOrder(orderId)
+        if (result.status === 'credited') {
+          return result.rewardPending
+            ? ' Se sumó un sello y el cliente completó su carta de fidelidad.'
+            : ` Se sumó un sello a la carta de fidelidad (${result.currentStamps}).`
+        }
+        return ''
+      }
+      const revoked = await revokeLoyaltyStampForOrder(orderId)
+      return revoked ? ' Se quitó el sello de la carta de fidelidad.' : ''
+    } catch (e) {
+      console.warn('[loyalty]', e)
+      return ' No se pudo actualizar la carta de fidelidad.'
+    }
+  }
+
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     setUpdatingOrderId(orderId)
     try {
@@ -242,12 +266,13 @@ export default function AdminPage({
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)),
       )
+      const loyaltyHint = await syncLoyaltyStamp(orderId, newStatus)
       try {
         await notifyCustomerOrderStatus(orderId, newStatus)
       } catch (e) {
         console.warn('[notifyCustomerOrderStatus]', e)
         showAdminToast(
-          'El estado se guardó, pero no se envió la notificación al cliente. Revisa la conexión o vuelve a elegir el mismo estado.',
+          `El estado se guardó, pero no se envió la notificación al cliente. Revisa la conexión o vuelve a elegir el mismo estado.${loyaltyHint}`,
           'warning',
           4200,
         )
@@ -257,9 +282,31 @@ export default function AdminPage({
         newStatus === 'despachado'
           ? ' El cliente recibirá aviso de que su pedido fue despachado y va en camino.'
           : ' El cliente recibirá una notificación en la app.'
-      showAdminToast(`Estado actualizado.${pushHint}`)
+      showAdminToast(`Estado actualizado.${pushHint}${loyaltyHint}`)
     } catch {
       showAdminToast('No se pudo actualizar el estado.', 'danger')
+    } finally {
+      setUpdatingOrderId(null)
+    }
+  }
+
+  const handleCreditPastOrder = async (orderId: string) => {
+    setUpdatingOrderId(orderId)
+    try {
+      const result = await creditLoyaltyStampForOrder(orderId)
+      const messages: Record<string, string> = {
+        credited: 'Sello acreditado en la carta de fidelidad.',
+        'program-disabled': 'El programa de membresía no está activo o le falta configuración.',
+        'below-minimum': 'Este pedido no alcanza el monto mínimo configurado.',
+        'already-credited': 'Este pedido ya tenía su sello.',
+        'invalid-order': 'El pedido no es válido para acreditar sello.',
+        'card-full': 'El cliente ya tiene la carta completa; canjea el premio primero.',
+      }
+      const key = result.status === 'credited' ? 'credited' : result.reason
+      showAdminToast(messages[key], result.status === 'credited' ? 'success' : 'warning')
+    } catch (e) {
+      console.warn('[loyalty]', e)
+      showAdminToast('No se pudo acreditar el sello.', 'danger')
     } finally {
       setUpdatingOrderId(null)
     }
@@ -276,15 +323,14 @@ export default function AdminPage({
       setOrders((prev) =>
         prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelado' } : o)),
       )
+      const loyaltyHint = await syncLoyaltyStamp(order.id, 'cancelado')
       try {
         await notifyCustomerOrderStatus(order.id, 'cancelado')
       } catch (e) {
         console.warn('[notifyCustomerOrderStatus]', e)
       }
       showAdminToast(
-        fromDelivered
-          ? 'Entrega anulada. Si había sello de membresía, se revocó automáticamente.'
-          : 'Pedido cancelado. El cliente recibirá una notificación.',
+        `${fromDelivered ? 'Entrega anulada.' : 'Pedido cancelado. El cliente recibirá una notificación.'}${loyaltyHint}`,
         'success',
       )
     } catch {
@@ -1010,6 +1056,16 @@ export default function AdminPage({
                             >
                               Anular entrega
                             </IonButton>
+                            {!order.loyaltyStampCredited && (
+                              <IonButton
+                                fill="outline"
+                                size="small"
+                                disabled={updatingOrderId === order.id}
+                                onClick={() => void handleCreditPastOrder(order.id)}
+                              >
+                                Acreditar sello
+                              </IonButton>
+                            )}
                             <IonButton
                               fill="clear"
                               size="small"

@@ -1,17 +1,20 @@
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   where,
+  writeBatch,
   type Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore'
-import { getFunctions, httpsCallable } from 'firebase/functions'
 import { db } from '../firebase'
 import {
   EMPTY_MEMBERSHIP_CONFIG,
@@ -23,32 +26,6 @@ import {
 } from '../types/membership'
 
 const MEMBERSHIP_CONFIG_REF = doc(db, 'config', 'membership')
-
-function getCallableFunctions() {
-  return getFunctions(undefined, 'us-central1')
-}
-
-async function callSearchMembershipUsers(
-  params: { phone?: string; uid?: string; pendingOnly?: boolean },
-): Promise<UserMembershipLookup[]> {
-  try {
-    const fn = httpsCallable<
-      { phone?: string; uid?: string; pendingOnly?: boolean },
-      { users: UserMembershipLookup[] }
-    >(getCallableFunctions(), 'searchMembershipUsers')
-    const res = await fn(params)
-    return Array.isArray(res.data?.users) ? res.data.users : []
-  } catch (err) {
-    const code =
-      err && typeof err === 'object' && 'code' in err
-        ? String((err as { code: string }).code)
-        : ''
-    if (code === 'functions/not-found' || code === 'not-found') {
-      return searchMembershipUsersFromFirestore(params)
-    }
-    throw err
-  }
-}
 
 async function buildUserLookupFromFirestore(
   uid: string,
@@ -208,30 +185,159 @@ export async function getLoyaltyProgress(userId: string): Promise<LoyaltyProgres
 }
 
 export async function findUsersByPhone(phone: string): Promise<UserMembershipLookup[]> {
-  return callSearchMembershipUsers({ phone })
+  return searchMembershipUsersFromFirestore({ phone })
 }
 
 export async function findUserByUid(uid: string): Promise<UserMembershipLookup | null> {
-  const users = await callSearchMembershipUsers({ uid })
+  const users = await searchMembershipUsersFromFirestore({ uid })
   return users[0] ?? null
 }
 
 export async function listUsersWithPendingRewards(): Promise<UserMembershipLookup[]> {
-  return callSearchMembershipUsers({ pendingOnly: true })
+  return searchMembershipUsersFromFirestore({ pendingOnly: true })
 }
 
+function sumOrderItems(items: unknown): number {
+  if (!Array.isArray(items)) return 0
+  return items.reduce((acc: number, item) => {
+    if (!item || typeof item !== 'object') return acc
+    const { unitPrice, quantity } = item as { unitPrice?: unknown; quantity?: unknown }
+    return (
+      acc + (typeof unitPrice === 'number' ? unitPrice : 0) * (typeof quantity === 'number' ? quantity : 0)
+    )
+  }, 0)
+}
+
+/** El total guardado debe coincidir con la suma de los ítems para evitar sellos con totales alterados. */
+function isOrderTotalValid(data: Record<string, unknown>): boolean {
+  const totalPrice = typeof data.totalPrice === 'number' ? data.totalPrice : 0
+  return totalPrice > 0 && totalPrice === sumOrderItems(data.items)
+}
+
+export type LoyaltyStampResult =
+  | { status: 'credited'; currentStamps: number; rewardPending: boolean }
+  | { status: 'skipped'; reason: 'program-disabled' | 'below-minimum' | 'already-credited' | 'invalid-order' | 'card-full' }
+
+/**
+ * Suma 1 sello al cliente del pedido si el programa está activo y el total alcanza el mínimo.
+ * Idempotente: el flag `loyaltyStampCredited` del pedido impide acreditar dos veces.
+ */
+export async function creditLoyaltyStampForOrder(orderId: string): Promise<LoyaltyStampResult> {
+  const config = await getMembershipConfig()
+  if (!isMembershipConfigComplete(config)) return { status: 'skipped', reason: 'program-disabled' }
+
+  const orderRef = doc(db, 'orders', orderId)
+
+  return runTransaction(db, async (tx) => {
+    const orderSnap = await tx.get(orderRef)
+    if (!orderSnap.exists()) return { status: 'skipped', reason: 'invalid-order' } as const
+    const order = orderSnap.data()
+    if (order.loyaltyStampCredited === true) return { status: 'skipped', reason: 'already-credited' } as const
+    const userId = typeof order.userId === 'string' ? order.userId : ''
+    if (!userId || !isOrderTotalValid(order)) return { status: 'skipped', reason: 'invalid-order' } as const
+    if (order.totalPrice < config.minOrderValueCop) return { status: 'skipped', reason: 'below-minimum' } as const
+
+    const progressRef = doc(db, 'loyaltyProgress', userId)
+    const progressSnap = await tx.get(progressRef)
+    const prevStamps = progressSnap.exists() ? Number(progressSnap.data().currentStamps) || 0 : 0
+
+    if (prevStamps >= config.stampsRequired) {
+      tx.update(orderRef, { loyaltyStampCredited: true, loyaltyStampCreditedAt: serverTimestamp() })
+      return { status: 'skipped', reason: 'card-full' } as const
+    }
+
+    const nextStamps = prevStamps + 1
+    const rewardPending = nextStamps >= config.stampsRequired
+    tx.set(
+      progressRef,
+      {
+        userId,
+        currentStamps: nextStamps,
+        rewardPending,
+        totalStampsEarned: increment(1),
+        lastStampOrderId: orderId,
+        lastStampAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    )
+    tx.update(orderRef, { loyaltyStampCredited: true, loyaltyStampCreditedAt: serverTimestamp() })
+    return { status: 'credited', currentStamps: nextStamps, rewardPending } as const
+  })
+}
+
+/** Quita el sello que acreditó el pedido (cancelación o entrega anulada). */
+export async function revokeLoyaltyStampForOrder(orderId: string): Promise<boolean> {
+  const config = await getMembershipConfig()
+  const orderRef = doc(db, 'orders', orderId)
+
+  return runTransaction(db, async (tx) => {
+    const orderSnap = await tx.get(orderRef)
+    if (!orderSnap.exists() || orderSnap.data().loyaltyStampCredited !== true) return false
+    const userId = String(orderSnap.data().userId ?? '')
+
+    const progressRef = doc(db, 'loyaltyProgress', userId)
+    const progressSnap = await tx.get(progressRef)
+    if (progressSnap.exists()) {
+      const prev = progressSnap.data()
+      const nextStamps = Math.max(0, (Number(prev.currentStamps) || 0) - 1)
+      tx.set(
+        progressRef,
+        {
+          currentStamps: nextStamps,
+          rewardPending: config.stampsRequired > 0 && nextStamps >= config.stampsRequired,
+          totalStampsEarned: Math.max(0, (Number(prev.totalStampsEarned) || 0) - 1),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      )
+    }
+    tx.update(orderRef, { loyaltyStampCredited: false, loyaltyStampCreditedAt: deleteField() })
+    return true
+  })
+}
+
+/** Marca el premio como entregado y reinicia la carta a 0 sellos. */
 export async function redeemLoyaltyReward(userId: string): Promise<void> {
-  const fn = httpsCallable<{ userId: string }, { message: string }>(
-    getCallableFunctions(),
-    'redeemLoyaltyReward',
-  )
-  await fn({ userId })
+  const ref = doc(db, 'loyaltyProgress', userId)
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists() || snap.data().rewardPending !== true) {
+      throw new Error('Este cliente no tiene premio pendiente.')
+    }
+    tx.set(
+      ref,
+      {
+        currentStamps: 0,
+        rewardPending: false,
+        totalRewardsRedeemed: increment(1),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    )
+  })
 }
 
 export async function resetLoyaltyProgress(userId: string): Promise<void> {
-  const fn = httpsCallable<{ userId: string }, { message: string }>(
-    getCallableFunctions(),
-    'resetLoyaltyProgress',
+  await setDoc(
+    doc(db, 'loyaltyProgress', userId),
+    { userId, currentStamps: 0, rewardPending: false, updatedAt: serverTimestamp() },
+    { merge: true },
   )
-  await fn({ userId })
+}
+
+/** Recalcula `rewardPending` de todos los clientes cuando cambia la cantidad de sellos requerida. */
+export async function recalculateRewardPendingForAll(stampsRequired: number): Promise<void> {
+  if (stampsRequired < 1) return
+  const snap = await getDocs(collection(db, 'loyaltyProgress'))
+  const batch = writeBatch(db)
+  snap.docs.forEach((progressDoc) => {
+    const currentStamps = Number(progressDoc.data().currentStamps) || 0
+    batch.set(
+      progressDoc.ref,
+      { rewardPending: currentStamps >= stampsRequired, updatedAt: serverTimestamp() },
+      { merge: true },
+    )
+  })
+  await batch.commit()
 }

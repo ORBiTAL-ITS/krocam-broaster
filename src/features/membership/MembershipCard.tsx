@@ -82,7 +82,7 @@ export function MembershipCard({
         ) : null}
 
         <p className="loyalty-card-rules">
-          Válido por compras mayores a {formatCop(config.minOrderValueCop)} y acumula{' '}
+          Válido por compras desde {formatCop(config.minOrderValueCop)} y acumula{' '}
           {stampsRequired} visitas para un <strong>{config.rewardTitle}</strong>
           {rewardPending ? ' — ¡premio listo!' : '!'}
         </p>

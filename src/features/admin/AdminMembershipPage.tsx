@@ -25,6 +25,7 @@ import {
   findUserByUid,
   findUsersByPhone,
   listUsersWithPendingRewards,
+  recalculateRewardPendingForAll,
   redeemLoyaltyReward,
   resetLoyaltyProgress,
   saveMembershipConfig,
@@ -126,6 +127,7 @@ export default function AdminMembershipPage() {
         return
       }
       await saveMembershipConfig(payload)
+      await recalculateRewardPendingForAll(payload.stampsRequired)
       setMessage(
         payload.enabled
           ? 'Programa publicado. Solo pedidos entregados a partir de ahora acumulan sellos.'

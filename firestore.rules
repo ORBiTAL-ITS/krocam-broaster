@@ -78,7 +78,7 @@ service cloud.firestore {
     match /loyaltyProgress/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
     match /meta/{docId} {
