@@ -64,8 +64,11 @@ const appleProvider = new OAuthProvider('apple.com')
 appleProvider.addScope('email')
 appleProvider.addScope('name')
 
-/** Una sola vez por carga de página; evita que Strict Mode consuma el resultado del redirect. */
-const redirectResultPromise = getRedirectResult(auth)
+/**
+ * Una sola vez por carga de página; evita que Strict Mode consuma el resultado del redirect.
+ * En iOS nativo Auth no tiene popupRedirectResolver y getRedirectResult lanza auth/argument-error.
+ */
+const redirectResultPromise = isNativeIOS ? Promise.resolve(null) : getRedirectResult(auth)
 
 /** Messaging solo en el cliente (navegador); necesario para notificaciones push. */
 let messaging: Messaging | null = null
